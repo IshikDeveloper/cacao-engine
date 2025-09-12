@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::io::{Read, Seek, SeekFrom};
 use std::fs::File;
 use crate::{
+    game::AssetInfo,
     assets::AssetManager,
     errors::CacaoError,
 };

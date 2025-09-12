@@ -1,6 +1,6 @@
 // src/errors.rs
 use std::fmt;
-use mlua::LuaError;
+use mlua::prelude::LuaError;
 
 #[derive(Debug)]
 pub enum CacaoError {

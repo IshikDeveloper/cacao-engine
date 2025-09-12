@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use image::GenericImageView;
 use crate::{
     errors::CacaoError,
     renderer::{Texture, Sprite},
@@ -104,7 +105,7 @@ impl AssetManager {
             .map_err(|e| CacaoError::RenderError(format!("Failed to load image: {}", e)))?;
         
         // Return a basic texture struct - actual GPU texture creation needs renderer context
-        Ok(Texture::from_image_data(img.dimensions(), img.to_rgba8().into_raw()))
+        Ok(Texture::from_image(&device, &queue, &img, Some("loaded_texture"))?)
 }
 
     async fn load_audio_from_file(&self, path: &Path) -> Result<AudioClip, CacaoError> {
