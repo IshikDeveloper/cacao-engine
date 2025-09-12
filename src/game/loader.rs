@@ -18,7 +18,7 @@ impl GameLoader {
         Self { games_dir }
     }
 
-    pub async fn load_game(&self, game_file: &Path, assets: &mut AssetManager) -> Result<Game, CacaoError> {
+    pub async fn load_game(&self, game_file: &Path, assets: &mut AssetManager, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Game, CacaoError> {
         let game_info = self.parse_gaem_file(game_file)?;
         let game_folder = self.find_game_folder(&game_info)?;
         
@@ -26,7 +26,7 @@ impl GameLoader {
         for asset_info in &game_info.required_assets {
             let asset_path = game_folder.join(&asset_info.path);
             self.verify_asset(&asset_path, asset_info)?;
-            assets.load_asset(&asset_path, asset_info.asset_type.clone()).await?;
+            assets.load_asset(&asset_path, asset_info.asset_type.clone(), device, queue).await?;
         }
 
         let game = Game::new(game_info, game_folder);
@@ -66,7 +66,6 @@ impl GameLoader {
     }
 
     fn find_game_folder(&self, game_info: &GameInfo) -> Result<PathBuf, CacaoError> {
-        // Look for a folder with the same name as the game title (sanitized)
         let folder_name = sanitize_filename(&game_info.title);
         let game_folder = self.games_dir.join(&folder_name);
         

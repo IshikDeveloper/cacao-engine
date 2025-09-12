@@ -28,11 +28,9 @@ pub struct CacaoEngine {
     game_loader: GameLoader,
     current_game: Option<Game>,
     
-    // Directories
     games_dir: PathBuf,
     saves_dir: PathBuf,
     
-    // Timing
     last_frame: Instant,
     target_fps: u32,
 }
@@ -50,7 +48,6 @@ impl CacaoEngine {
         let audio = AudioSystem::new()?;
         let input = InputManager::new();
         
-        // Setup directories
         let games_dir = std::env::current_dir()?.join("games");
         let saves_dir = std::env::current_dir()?.join("saves");
         
@@ -138,7 +135,6 @@ impl CacaoEngine {
         if let Some(ref game) = self.current_game {
             game.render(&mut self.renderer)?;
         } else {
-            // Render game selection screen
             self.render_game_browser()?;
         }
         
@@ -147,13 +143,14 @@ impl CacaoEngine {
     }
 
     fn render_game_browser(&mut self) -> Result<(), CacaoError> {
-        // TODO: Implement game browser UI
         self.renderer.clear_screen([0.1, 0.1, 0.2, 1.0]);
         Ok(())
     }
 
     pub async fn load_game(&mut self, game_path: &Path) -> Result<(), CacaoError> {
-        let game = self.game_loader.load_game(game_path, &mut self.assets).await?;
+        let device = self.renderer.get_device();
+        let queue = self.renderer.get_queue();
+        let game = self.game_loader.load_game(game_path, &mut self.assets, device, queue).await?;
         self.current_game = Some(game);
         Ok(())
     }

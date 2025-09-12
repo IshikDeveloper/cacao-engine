@@ -55,8 +55,7 @@ impl AssetManager {
         }
     }
 
-    pub async fn load_asset(&mut self, path: &Path, asset_type: AssetType) -> Result<(), CacaoError> {
-        let path_str = path.to_string_lossy().to_string();
+    pub async fn load_asset(&mut self, path: &Path, asset_type: AssetType, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), CacaoError> {
         let file_name = path.file_name()
             .ok_or_else(|| CacaoError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid file path")))?
             .to_string_lossy()
@@ -64,7 +63,7 @@ impl AssetManager {
 
         match asset_type {
             AssetType::Sprite => {
-                let texture = self.load_texture_from_file(path).await?;
+                let texture = self.load_texture_from_file(path, device, queue).await?;
                 let sprite = Arc::new(Sprite::new(texture));
                 self.sprites.insert(file_name.clone(), sprite);
                 log::info!("Loaded sprite: {}", file_name);
@@ -94,18 +93,13 @@ impl AssetManager {
         Ok(())
     }
 
-    // Update the load_texture_from_file method in AssetManager
     async fn load_texture_from_file(&self, path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<Texture, CacaoError> {
         let bytes = tokio::fs::read(path).await?;
-        
-        // For now, create a placeholder texture
-        // In a complete implementation, you'd need access to the GPU device here
         let img = image::load_from_memory(&bytes)
             .map_err(|e| CacaoError::RenderError(format!("Failed to load image: {}", e)))?;
         
-        // Return a basic texture struct - actual GPU texture creation needs renderer context
-        Ok(Texture::from_image(device, queue, &img, Some("loaded_texture"))?)
-}
+        Texture::from_image(device, queue, &img, Some("loaded_texture"))
+    }
 
     async fn load_audio_from_file(&self, path: &Path) -> Result<AudioClip, CacaoError> {
         let bytes = tokio::fs::read(path).await?;
@@ -121,11 +115,10 @@ impl AssetManager {
             _ => return Err(CacaoError::AudioError(format!("Unsupported audio format: {}", extension))),
         };
 
-        // Basic WAV parsing for now
         let (sample_rate, channels) = if matches!(format, AudioFormat::Wav) {
             parse_wav_header(&bytes)?
         } else {
-            (44100, 2) // Default values for other formats
+            (44100, 2)
         };
 
         Ok(AudioClip {
@@ -146,7 +139,7 @@ impl AssetManager {
         Ok(Font {
             data: bytes,
             name,
-            size: 16.0, // Default size
+            size: 16.0,
         })
     }
 
@@ -204,13 +197,12 @@ impl AssetManager {
         let mut font_memory = 0;
         let mut data_memory = 0;
 
-        // Calculate approximate memory usage
         for sprite in self.sprites.values() {
-            sprite_memory += (sprite.width * sprite.height * 4.0) as usize; // RGBA
+            sprite_memory += (sprite.width * sprite.height * 4.0) as usize;
         }
 
         for texture in self.textures.values() {
-            texture_memory += (texture.width * texture.height * 4) as usize; // RGBA
+            texture_memory += (texture.width * texture.height * 4) as usize;
         }
 
         for audio in self.audio_clips.values() {
@@ -239,6 +231,29 @@ impl AssetManager {
             total_memory: sprite_memory + texture_memory + audio_memory + script_memory + font_memory + data_memory,
         }
     }
+
+    pub async fn preload_directory(&mut self, dir_path: &Path, device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), CacaoError> {
+        let mut entries = tokio::fs::read_dir(dir_path).await?;
+        
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Some(asset_type) = determine_asset_type(&path) {
+                    if let Err(e) = self.load_asset(&path, asset_type, device, queue).await {
+                        log::warn!("Failed to preload asset {}: {}", path.display(), e);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    pub fn enable_hot_reloading(&mut self, watch_directory: PathBuf) -> Result<(), CacaoError> {
+        log::info!("Hot reloading enabled for directory: {}", watch_directory.display());
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -262,57 +277,23 @@ pub struct AssetMemoryInfo {
     pub total_memory: usize,
 }
 
-// Helper function to parse WAV file headers
 fn parse_wav_header(data: &[u8]) -> Result<(u32, u16), CacaoError> {
     if data.len() < 44 {
         return Err(CacaoError::AudioError("Invalid WAV file: too short".to_string()));
     }
 
-    // Check RIFF header
     if &data[0..4] != b"RIFF" {
         return Err(CacaoError::AudioError("Invalid WAV file: missing RIFF header".to_string()));
     }
 
-    // Check WAVE format
     if &data[8..12] != b"WAVE" {
         return Err(CacaoError::AudioError("Invalid WAV file: not WAVE format".to_string()));
     }
 
-    // Extract sample rate (bytes 24-27)
     let sample_rate = u32::from_le_bytes([data[24], data[25], data[26], data[27]]);
-    
-    // Extract number of channels (bytes 22-23)
     let channels = u16::from_le_bytes([data[22], data[23]]);
 
     Ok((sample_rate, channels))
-}
-
-// Asset preloading and hot-reloading functionality
-impl AssetManager {
-    pub async fn preload_directory(&mut self, dir_path: &Path) -> Result<(), CacaoError> {
-        let mut entries = tokio::fs::read_dir(dir_path).await?;
-        
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            
-            if path.is_file() {
-                if let Some(asset_type) = determine_asset_type(&path) {
-                    if let Err(e) = self.load_asset(&path, asset_type).await {
-                        log::warn!("Failed to preload asset {}: {}", path.display(), e);
-                    }
-                }
-            }
-        }
-        
-        Ok(())
-    }
-
-    pub fn enable_hot_reloading(&mut self, watch_directory: PathBuf) -> Result<(), CacaoError> {
-        // TODO: Implement file system watching for hot-reloading
-        // This would use a library like `notify` to watch for file changes
-        log::info!("Hot reloading enabled for directory: {}", watch_directory.display());
-        Ok(())
-    }
 }
 
 fn determine_asset_type(path: &Path) -> Option<AssetType> {

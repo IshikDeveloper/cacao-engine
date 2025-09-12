@@ -56,8 +56,6 @@ pub struct SpriteRenderer {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    quad_vertices: Vec<SpriteVertex>,
-    quad_indices: Vec<u16>,
 }
 
 impl SpriteRenderer {
@@ -67,7 +65,6 @@ impl SpriteRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/sprite.wgsl").into()),
         });
 
-        // Create quad vertices (centered at origin)
         let quad_vertices = vec![
             SpriteVertex { position: [-0.5, -0.5], tex_coords: [0.0, 1.0] }, // Bottom-left
             SpriteVertex { position: [ 0.5, -0.5], tex_coords: [1.0, 1.0] }, // Bottom-right
@@ -180,14 +177,10 @@ impl SpriteRenderer {
             uniform_buffer,
             uniform_bind_group_layout,
             texture_bind_group_layout,
-            quad_vertices,
-            quad_indices,
         })
     }
 
-    pub fn draw_sprite(&mut self, sprite: &Sprite, x: f32, y: f32, rotation: f32, scale: f32, camera: &Camera) {
-        // This would queue sprites for batch rendering
-        // For now, we'll implement immediate mode rendering
+    pub fn draw_sprite(&mut self, _sprite: &Sprite, _x: f32, _y: f32, _rotation: f32, _scale: f32, _camera: &Camera) {
         // TODO: Implement batched rendering for better performance
     }
 }

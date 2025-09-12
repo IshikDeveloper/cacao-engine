@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}}; // KeyInit is required for new_from_slice
+use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
 use sha2::{Sha256, Digest};
 use rand::RngCore;
 use crate::errors::CacaoError;
@@ -153,113 +153,7 @@ impl SaveManager {
         calculate_data_checksum(&self.current_save_data)
     }
 
-    // --- Other helper functions remain unchanged ---
-}
-
-// --- Encryption/Decryption fixes for aes-gcm 0.10+ ---
-fn encrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, CacaoError> {
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| CacaoError::CryptoError(format!("Failed to init cipher: {:?}", e)))?;
-
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let encrypted = cipher.encrypt(nonce, data)
-        .map_err(|e| CacaoError::CryptoError(format!("Encryption failed: {}", e)))?;
-
-    let mut result = Vec::with_capacity(12 + encrypted.len());
-    result.extend_from_slice(&nonce_bytes);
-    result.extend_from_slice(&encrypted);
-
-    Ok(result)
-}
-
-fn decrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, CacaoError> {
-    if data.len() < 12 {
-        return Err(CacaoError::CryptoError("Invalid encrypted data: too short".to_string()));
-    }
-
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|e| CacaoError::CryptoError(format!("Failed to init cipher: {:?}", e)))?;
-
-    let nonce = Nonce::from_slice(&data[0..12]);
-    let encrypted_data = &data[12..];
-
-    let decrypted = cipher.decrypt(nonce, encrypted_data)
-        .map_err(|e| CacaoError::CryptoError(format!("Decryption failed: {}", e)))?;
-
-    Ok(decrypted)
-}
-
-fn calculate_data_checksum(data: &HashMap<String, SaveValue>) -> Result<String, CacaoError> {
-    let serialized = bincode::serialize(data)
-        .map_err(|e| CacaoError::CryptoError(format!("Failed to serialize data for checksum: {}", e)))?;
-    
-    let mut hasher = Sha256::new();
-    hasher.update(&serialized);
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-fn sanitize_game_id(game_id: &str) -> String {
-    game_id
-        .chars()
-        .map(|c| match c {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => c,
-            _ => '_',
-        })
-        .collect()
-}
-
-fn estimate_save_size(data: &HashMap<String, SaveValue>) -> usize {
-    // Rough estimate of serialized size
-    let mut size = 0;
-    for (key, value) in data {
-        size += key.len();
-        size += estimate_value_size(value);
-    }
-    size
-}
-
-fn estimate_value_size(value: &SaveValue) -> usize {
-    match value {
-        SaveValue::String(s) => s.len(),
-        SaveValue::Integer(_) => 8,
-        SaveValue::Float(_) => 8,
-        SaveValue::Boolean(_) => 1,
-        SaveValue::Array(arr) => arr.iter().map(estimate_value_size).sum(),
-        SaveValue::Object(obj) => obj.iter().map(|(k, v)| k.len() + estimate_value_size(v)).sum(),
-    }
-}
-
-fn derive_encryption_key(secret_key: &str) -> [u8; 32] {
-    use sha2::{Sha256, Digest};
-    let mut hasher = Sha256::new();
-    hasher.update(secret_key.as_bytes());
-    hasher.update(b"cacao_engine_salt"); // Add salt for better security
-    let hash = hasher.finalize();
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&hash[..]);
-    key
-}
-
-#[derive(Debug)]
-pub struct SaveInfo {
-    pub path: PathBuf,
-    pub size: u64,
-    pub modified_timestamp: u64,
-    pub is_backup: bool,
-}
-
-#[derive(Debug)]
-pub struct SaveStats {
-    pub total_keys: usize,
-    pub estimated_size: usize,
-    pub last_modified: u64,
-}
-
-// Convenience methods for common save operations
-impl SaveManager {
+    // Convenience methods for common save operations
     pub fn write_string(&mut self, key: String, value: String) -> Result<(), CacaoError> {
         self.write(key, SaveValue::String(value))
     }
@@ -319,4 +213,68 @@ impl SaveManager {
         self.write_bool(key, new_value)?;
         Ok(new_value)
     }
+}
+
+fn encrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, CacaoError> {
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| CacaoError::CryptoError(format!("Failed to init cipher: {:?}", e)))?;
+
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let encrypted = cipher.encrypt(nonce, data)
+        .map_err(|e| CacaoError::CryptoError(format!("Encryption failed: {}", e)))?;
+
+    let mut result = Vec::with_capacity(12 + encrypted.len());
+    result.extend_from_slice(&nonce_bytes);
+    result.extend_from_slice(&encrypted);
+
+    Ok(result)
+}
+
+fn decrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, CacaoError> {
+    if data.len() < 12 {
+        return Err(CacaoError::CryptoError("Invalid encrypted data: too short".to_string()));
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| CacaoError::CryptoError(format!("Failed to init cipher: {:?}", e)))?;
+
+    let nonce = Nonce::from_slice(&data[0..12]);
+    let encrypted_data = &data[12..];
+
+    let decrypted = cipher.decrypt(nonce, encrypted_data)
+        .map_err(|e| CacaoError::CryptoError(format!("Decryption failed: {}", e)))?;
+
+    Ok(decrypted)
+}
+
+fn calculate_data_checksum(data: &HashMap<String, SaveValue>) -> Result<String, CacaoError> {
+    let serialized = bincode::serialize(data)
+        .map_err(|e| CacaoError::CryptoError(format!("Failed to serialize data for checksum: {}", e)))?;
+    
+    let mut hasher = Sha256::new();
+    hasher.update(&serialized);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn sanitize_game_id(game_id: &str) -> String {
+    game_id
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => c,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn derive_encryption_key(secret_key: &str) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(secret_key.as_bytes());
+    hasher.update(b"cacao_engine_salt");
+    let hash = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&hash[..]);
+    key
 }
