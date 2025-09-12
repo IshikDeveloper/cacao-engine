@@ -83,8 +83,6 @@ impl CacaoEngine {
         let target_frame_time = Duration::from_millis(1000 / self.target_fps as u64);
 
         event_loop.run(move |event, _, control_flow| {
-            *control_flow = ControlFlow::Poll;
-
             match event {
                 Event::WindowEvent {
                     ref event,
@@ -123,7 +121,8 @@ impl CacaoEngine {
                 }
                 _ => {}
             }
-        });
+        })
+        .map_err(|e| CacaoError::RenderError(format!("Event loop error: {:?}", e)))
     }
 
     fn update(&mut self, delta_time: Duration) {

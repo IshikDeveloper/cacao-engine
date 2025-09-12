@@ -1,7 +1,6 @@
+// src/errors.rs
 use std::fmt;
-use std::fs::File;
-use std::io::Read;
-use mlua::{Lua, LuaError};
+use mlua::LuaError;
 
 #[derive(Debug)]
 pub enum CacaoError {
@@ -40,37 +39,4 @@ impl From<LuaError> for CacaoError {
     fn from(err: LuaError) -> Self {
         CacaoError::LuaError(err)
     }
-}
-
-// --------------------
-// Application Logic
-// --------------------
-
-fn read_file(path: &str) -> Result<String, CacaoError> {
-    let mut file = File::open(path)?; // io::Error -> CacaoError
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
-fn run_lua_script(script: &str) -> Result<(), CacaoError> {
-    let lua = Lua::new();
-    lua.load(script).exec()?; // LuaError -> CacaoError
-    Ok(())
-}
-
-fn main() -> Result<(), CacaoError> {
-    // Example: Reading a file
-    match read_file("example.txt") {
-        Ok(contents) => println!("File contents: {}", contents),
-        Err(e) => println!("Failed to read file: {}", e),
-    }
-
-    // Example: Running Lua script
-    let script = r#"
-        print("Hello from Lua!")
-    "#;
-    run_lua_script(script)?;
-
-    Ok(())
 }

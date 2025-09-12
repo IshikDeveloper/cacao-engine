@@ -10,6 +10,7 @@ mod input;
 mod assets;
 mod crypto;
 mod saves;
+mod errors;
 
 use engine::CacaoEngine;
 

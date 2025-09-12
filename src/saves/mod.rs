@@ -232,6 +232,17 @@ fn estimate_value_size(value: &SaveValue) -> usize {
     }
 }
 
+fn derive_encryption_key(secret_key: &str) -> [u8; 32] {
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(secret_key.as_bytes());
+    hasher.update(b"cacao_engine_salt"); // Add salt for better security
+    let hash = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&hash[..]);
+    key
+}
+
 #[derive(Debug)]
 pub struct SaveInfo {
     pub path: PathBuf,

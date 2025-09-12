@@ -94,13 +94,18 @@ impl AssetManager {
         Ok(())
     }
 
+    // Update the load_texture_from_file method in AssetManager
     async fn load_texture_from_file(&self, path: &Path) -> Result<Texture, CacaoError> {
         let bytes = tokio::fs::read(path).await?;
         
-        // We need access to the GPU device here
-        // For now, we'll return an error and implement this properly when we have renderer context
-        Err(CacaoError::RenderError("Texture loading requires renderer context".to_string()))
-    }
+        // For now, create a placeholder texture
+        // In a complete implementation, you'd need access to the GPU device here
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| CacaoError::RenderError(format!("Failed to load image: {}", e)))?;
+        
+        // Return a basic texture struct - actual GPU texture creation needs renderer context
+        Ok(Texture::from_image_data(img.dimensions(), img.to_rgba8().into_raw()))
+}
 
     async fn load_audio_from_file(&self, path: &Path) -> Result<AudioClip, CacaoError> {
         let bytes = tokio::fs::read(path).await?;
