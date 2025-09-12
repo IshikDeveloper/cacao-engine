@@ -1,5 +1,5 @@
 // src/crypto/mod.rs
-use aes_gcm::{Aes256Gcm, Key, Nonce, aead::{Aead, KeyInit}};
+use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
 use sha2::{Sha256, Digest};
 use rand::RngCore;
 use crate::errors::CacaoError;

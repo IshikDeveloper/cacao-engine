@@ -4,7 +4,6 @@ pub mod texture;
 pub mod sprite;
 pub mod camera;
 
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 use crate::errors::CacaoError;
 

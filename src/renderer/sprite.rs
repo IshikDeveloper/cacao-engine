@@ -1,6 +1,5 @@
 // src/renderer/sprite.rs
 use wgpu::util::DeviceExt;
-use glam::{Mat4, Vec2, Vec3};
 use crate::{errors::CacaoError, renderer::Camera};
 use super::Texture;
 

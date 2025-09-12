@@ -1,8 +1,8 @@
 // src/saves/mod.rs
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use aes_gcm::{Aes256Gcm, Key, Nonce, aead::{Aead, KeyInit}}; // KeyInit is required for new_from_slice
+use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}}; // KeyInit is required for new_from_slice
 use sha2::{Sha256, Digest};
 use rand::RngCore;
 use crate::errors::CacaoError;

@@ -1,6 +1,5 @@
 // src/audio/mod.rs
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use crate::{errors::CacaoError, assets::AudioClip};
 

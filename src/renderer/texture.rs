@@ -1,5 +1,4 @@
 // src/renderer/texture.rs
-use wgpu::util::DeviceExt;
 use image::GenericImageView;
 use crate::errors::CacaoError;
 
