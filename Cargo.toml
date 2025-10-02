@@ -1,9 +1,13 @@
 [package]
-name = "cacao-engine"
+name = "cacao"
 version = "0.1.0"
 edition = "2021"
 description = "Cacao is an offline game engine that lets you download and play games! And it also comes with an visual editor, wow!"
 authors = ["Adam Hawree adam453345@gmail.com"]
+
+[[bin]]
+name = "cacao"  # Instead of "cacao-engine"
+path = "src/main.rs"
 
 [dependencies]
 # Core dependencies
