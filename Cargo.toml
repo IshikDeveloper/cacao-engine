@@ -9,6 +9,10 @@ authors = ["Adam Hawree adam453345@gmail.com"]
 name = "cacao"
 path = "src/main.rs"
 
+[[example]]
+name = "create_demo_game"
+path = "examples/create_demo_game.rs"
+
 [dependencies]
 # Core dependencies
 winit = "0.28"
