@@ -6,7 +6,7 @@ description = "Cacao is an offline game engine that lets you download and play g
 authors = ["Adam Hawree adam453345@gmail.com"]
 
 [[bin]]
-name = "cacao"  # Instead of "cacao-engine"
+name = "cacao"
 path = "src/main.rs"
 
 [dependencies]
