@@ -51,6 +51,9 @@ pub struct CacaoEngine {
 
     last_frame: Instant,
     target_fps: u32,
+    
+    // Track if we've shown the browser to avoid spam
+    browser_shown: bool,
 }
 
 impl CacaoEngine {
@@ -106,28 +109,34 @@ impl CacaoEngine {
             saves_dir,
             last_frame: Instant::now(),
             target_fps: 60,
+            browser_shown: false,
         })
     }
 
     fn discover_games(loader: &GameLoader) -> Result<Vec<GameEntry>, CacaoError> {
+        log::info!("Searching for games...");
         let game_files = loader.discover_games()?;
+        log::info!("Found {} .gaem files", game_files.len());
+        
         let mut entries = Vec::new();
 
         for path in game_files {
+            log::info!("Trying to parse: {}", path.display());
             match loader.parse_gaem_file_engine(&path) {
                 Ok(info) => {
-                    log::info!("Found game: {} by {}", info.title, info.author);
+                    log::info!("✓ Found game: {} by {}", info.title, info.author);
                     entries.push(GameEntry {
                         info,
                         file_path: path,
                     });
                 }
                 Err(e) => {
-                    log::warn!("Failed to parse game file {:?}: {}", path, e);
+                    log::warn!("✗ Failed to parse game file {:?}: {}", path, e);
                 }
             }
         }
 
+        log::info!("Successfully loaded {} games", entries.len());
         Ok(entries)
     }
 
@@ -278,6 +287,7 @@ impl CacaoEngine {
         };
 
         self.window.set_title("Cacao Engine - Game Browser");
+        self.browser_shown = false; // Reset so browser menu shows again
     }
 
     fn render(&mut self) -> Result<(), CacaoError> {
@@ -322,18 +332,36 @@ impl CacaoEngine {
         games: &[GameEntry],
         selected_index: usize,
     ) -> Result<(), CacaoError> {
-        // Dark blue background
-        self.renderer.clear_screen([0.1, 0.1, 0.2, 1.0]);
+        // Dark background (1a1a1a)
+        self.renderer.clear_screen([0.102, 0.102, 0.102, 1.0]);
 
-        // TODO: Render text for each game in the list
-        // For now, we'll just have the background
-        // In a full implementation, you'd use the text rendering system
-
-        log::debug!(
-            "Rendering browser with {} games, selected: {}",
-            games.len(),
-            selected_index
-        );
+        // Only log once when entering browser
+        if !self.browser_shown {
+            self.browser_shown = true;
+            
+            if games.is_empty() {
+                log::warn!("===========================================");
+                log::warn!("NO GAMES FOUND!");
+                log::warn!("Run: cargo run --example create_demo_game");
+                log::warn!("===========================================");
+            } else {
+                log::info!("===========================================");
+                log::info!("CACAO ENGINE - GAME BROWSER");
+                log::info!("===========================================");
+                for (i, game) in games.iter().enumerate() {
+                    let marker = if i == selected_index { ">>>" } else { "   " };
+                    log::info!("{} {} - {} (v{})", 
+                        marker, 
+                        game.info.title, 
+                        game.info.author,
+                        game.info.version
+                    );
+                }
+                log::info!("===========================================");
+                log::info!("Use Arrow Keys to navigate, Enter to load");
+                log::info!("===========================================");
+            }
+        }
 
         Ok(())
     }
