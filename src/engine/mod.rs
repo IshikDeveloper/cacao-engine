@@ -55,7 +55,6 @@ pub struct CacaoEngine {
 
 impl CacaoEngine {
     pub async fn new() -> Result<Self, CacaoError> {
-        env_logger::init();
         log::info!("Initializing Cacao Engine...");
 
         let event_loop = EventLoop::new();
