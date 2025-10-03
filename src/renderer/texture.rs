@@ -1,13 +1,19 @@
 // src/renderer/texture.rs
 use image::GenericImageView;
 use crate::errors::CacaoError;
+use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct Texture {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
-    pub width: u32,
-    pub height: u32,
+    inner: Arc<TextureInner>,
+}
+
+struct TextureInner {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    width: u32,
+    height: u32,
 }
 
 impl Texture {
@@ -77,11 +83,29 @@ impl Texture {
         });
 
         Ok(Self {
-            texture,
-            view,
-            sampler,
-            width: dimensions.0,
-            height: dimensions.1,
+            inner: Arc::new(TextureInner {
+                texture,
+                view,
+                sampler,
+                width: dimensions.0,
+                height: dimensions.1,
+            })
         })
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.inner.view
+    }
+
+    pub fn sampler(&self) -> &wgpu::Sampler {
+        &self.inner.sampler
+    }
+
+    pub fn width(&self) -> u32 {
+        self.inner.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.inner.height
     }
 }

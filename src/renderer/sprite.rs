@@ -12,8 +12,8 @@ struct SpriteVertex {
 
 impl SpriteVertex {
     const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
-        0 => Float32x2,  // position
-        1 => Float32x2,  // tex_coords
+        0 => Float32x2,
+        1 => Float32x2,
     ];
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -42,11 +42,17 @@ pub struct Sprite {
 impl Sprite {
     pub fn new(texture: Texture) -> Self {
         Self {
-            width: texture.width as f32,
-            height: texture.height as f32,
+            width: texture.width() as f32,
+            height: texture.height() as f32,
             texture,
         }
     }
+}
+
+struct SpriteDrawCall {
+    texture: Texture,
+    transform: glam::Mat4,
+    color: [f32; 4],
 }
 
 pub struct SpriteRenderer {
@@ -56,6 +62,7 @@ pub struct SpriteRenderer {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    sprite_queue: Vec<SpriteDrawCall>,
 }
 
 impl SpriteRenderer {
@@ -66,13 +73,13 @@ impl SpriteRenderer {
         });
 
         let quad_vertices = vec![
-            SpriteVertex { position: [-0.5, -0.5], tex_coords: [0.0, 1.0] }, // Bottom-left
-            SpriteVertex { position: [ 0.5, -0.5], tex_coords: [1.0, 1.0] }, // Bottom-right
-            SpriteVertex { position: [ 0.5,  0.5], tex_coords: [1.0, 0.0] }, // Top-right
-            SpriteVertex { position: [-0.5,  0.5], tex_coords: [0.0, 0.0] }, // Top-left
+            SpriteVertex { position: [-0.5, -0.5], tex_coords: [0.0, 1.0] },
+            SpriteVertex { position: [ 0.5, -0.5], tex_coords: [1.0, 1.0] },
+            SpriteVertex { position: [ 0.5,  0.5], tex_coords: [1.0, 0.0] },
+            SpriteVertex { position: [-0.5,  0.5], tex_coords: [0.0, 0.0] },
         ];
 
-        let quad_indices = vec![0, 1, 2, 2, 3, 0];
+        let quad_indices: Vec<u16> = vec![0, 1, 2, 2, 3, 0];
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Sprite Vertex Buffer"),
@@ -177,10 +184,116 @@ impl SpriteRenderer {
             uniform_buffer,
             uniform_bind_group_layout,
             texture_bind_group_layout,
+            sprite_queue: Vec::new(),
         })
     }
 
-    pub fn draw_sprite(&mut self, _sprite: &Sprite, _x: f32, _y: f32, _rotation: f32, _scale: f32, _camera: &Camera) {
-        // TODO: Implement batched rendering for better performance
+    pub fn draw_sprite(
+        &mut self, 
+        sprite: &Sprite, 
+        x: f32, 
+        y: f32, 
+        rotation: f32, 
+        scale: f32, 
+        _camera: &Camera
+    ) {
+        use glam::{Mat4, Vec3, Quat};
+        
+        let translation = Mat4::from_translation(Vec3::new(x, y, 0.0));
+        let rotation_mat = Mat4::from_quat(Quat::from_rotation_z(rotation));
+        let scale_mat = Mat4::from_scale(Vec3::new(
+            sprite.width * scale,
+            sprite.height * scale,
+            1.0,
+        ));
+        
+        let transform = translation * rotation_mat * scale_mat;
+        
+        self.sprite_queue.push(SpriteDrawCall {
+            texture: sprite.texture.clone(),
+            transform,
+            color: [1.0, 1.0, 1.0, 1.0],
+        });
+    }
+
+    pub fn flush(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        camera: &mut Camera,
+    ) {
+        if self.sprite_queue.is_empty() {
+            return;
+        }
+        
+        let view_proj = camera.get_view_projection_matrix();
+        
+        // Create bind groups OUTSIDE the render pass to avoid lifetime issues
+        let mut bind_groups = Vec::new();
+        
+        for draw_call in &self.sprite_queue {
+            let uniform = SpriteUniform {
+                view_proj: view_proj.to_cols_array_2d(),
+                transform: draw_call.transform.to_cols_array_2d(),
+                color: draw_call.color,
+            };
+            
+            queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
+            
+            let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.uniform_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                }],
+                label: Some("Uniform Bind Group"),
+            });
+            
+            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(draw_call.texture.view()),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(draw_call.texture.sampler()),
+                    },
+                ],
+                label: Some("Texture Bind Group"),
+            });
+            
+            bind_groups.push((uniform_bind_group, texture_bind_group));
+        }
+        
+        // NOW create the render pass
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Sprite Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
+        });
+        
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        
+        for (uniform_bind_group, texture_bind_group) in &bind_groups {
+            render_pass.set_bind_group(0, uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, texture_bind_group, &[]);
+            render_pass.draw_indexed(0..6, 0, 0..1);
+        }
+        
+        drop(render_pass);
+        self.sprite_queue.clear();
     }
 }

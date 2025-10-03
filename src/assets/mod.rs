@@ -202,7 +202,7 @@ impl AssetManager {
         }
 
         for texture in self.textures.values() {
-            texture_memory += (texture.width * texture.height * 4) as usize;
+            texture_memory += (texture.width() * texture.height() * 4) as usize; // Assuming RGBA8
         }
 
         for audio in self.audio_clips.values() {

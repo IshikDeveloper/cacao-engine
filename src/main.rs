@@ -1,5 +1,4 @@
 // src/main.rs
-use std::path::PathBuf;
 use log::info;
 
 mod engine;
@@ -20,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Cacao Engine...");
 
     let engine = CacaoEngine::new().await?;
-    engine.run().await?;
-
-    Ok(())
+    
+    // run() never returns, so we never reach this point
+    engine.run().await;
 }

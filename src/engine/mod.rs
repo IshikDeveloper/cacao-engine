@@ -132,7 +132,7 @@ impl CacaoEngine {
         Ok(entries)
     }
 
-    pub async fn run(mut self) -> Result<(), CacaoError> {
+    pub async fn run(mut self) -> ! {
         let event_loop = self.event_loop.take().unwrap();
         let target_frame_time = Duration::from_millis(1000 / self.target_fps as u64);
 
@@ -180,120 +180,60 @@ impl CacaoEngine {
     fn update(&mut self, delta_time: Duration) {
         self.input.update();
 
-        // Take out the state so we don't double-borrow `self`
-        let state = std::mem::replace(
-            &mut self.state,
-            EngineState::Browser {
-                games: vec![],
-                selected_index: 0,
-            },
-        );
+        // Check for escape key early if we're playing
+        let should_unload = matches!(self.state, EngineState::Playing) 
+            && self.input.is_key_just_pressed(winit::event::VirtualKeyCode::Escape);
 
-        self.state = match state {
-            EngineState::Browser {
-                mut games,
-                mut selected_index,
-            } => {
-                // Now we can safely call methods on `self`
-                self.update_browser(&mut games, &mut selected_index);
-                EngineState::Browser {
-                    games,
-                    selected_index,
-                }
-            }
-
-            EngineState::Playing => {
-                if let Some(ref mut game) = self.current_game {
-                    game.update(
-                        delta_time,
-                        &mut self.input,
-                        &mut self.audio,
-                        &mut self.saves,
-                    );
-                }
-
-                // Check for escape to return to browser
-                if self
-                    .input
-                    .is_key_just_pressed(winit::event::VirtualKeyCode::Escape)
-                {
-                    self.unload_game();
-                }
-
-                EngineState::Playing
-            }
-
-            EngineState::Loading { mut progress } => {
-                // Simulate loading progress
-                progress += delta_time.as_secs_f32() * 0.5;
-                if progress >= 1.0 {
-                    EngineState::Playing
-                } else {
-                    EngineState::Loading { progress }
-                }
-            }
-
-            other => other, // fallback for any extra states
-        };
-    }
-
-    fn update_browser(&mut self, games: &[GameEntry], selected_index: &mut usize) {
-        use winit::event::VirtualKeyCode;
-
-        if games.is_empty() {
+        if should_unload {
+            self.unload_game();
             return;
         }
 
-        // Navigate with arrow keys
-        if self.input.is_key_just_pressed(VirtualKeyCode::Up) {
-            if *selected_index > 0 {
-                *selected_index -= 1;
-            }
-        }
+        match &mut self.state {
+            EngineState::Browser { games, selected_index } => {
+                use winit::event::VirtualKeyCode;
 
-        if self.input.is_key_just_pressed(VirtualKeyCode::Down) {
-            if *selected_index < games.len() - 1 {
-                *selected_index += 1;
-            }
-        }
+                if !games.is_empty() {
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Up) {
+                        if *selected_index > 0 {
+                            *selected_index -= 1;
+                        }
+                    }
 
-        // Load game with Enter
-        if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
-            let game_entry = &games[*selected_index];
-            log::info!("Loading game: {}", game_entry.info.title);
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Down) {
+                        if *selected_index < games.len() - 1 {
+                            *selected_index += 1;
+                        }
+                    }
 
-            // Start async load
-            let game_path = game_entry.file_path.clone();
-            if let Err(e) = self.start_loading_game(&game_path) {
-                log::error!("Failed to start loading game: {}", e);
-            }
-        }
-    }
-
-    fn update_state(&mut self) {
-        use std::mem;
-
-        let state = std::mem::replace(
-            &mut self.state,
-            EngineState::Browser {
-                games: vec![],
-                selected_index: 0,
-            },
-        );
-
-        self.state = match state {
-            EngineState::Browser {
-                mut games,
-                mut selected_index,
-            } => {
-                self.update_browser(&mut games, &mut selected_index);
-                EngineState::Browser {
-                    games,
-                    selected_index,
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
+                        let game_path = games[*selected_index].file_path.clone();
+                        let title = games[*selected_index].info.title.clone();
+                        log::info!("Loading game: {}", title);
+                        
+                        // Drop borrows before calling method
+                        drop(games);
+                        drop(selected_index);
+                        
+                        if let Err(e) = self.start_loading_game(&game_path) {
+                            log::error!("Failed to start loading game: {}", e);
+                        }
+                        return;
+                    }
                 }
             }
-            other => other,
-        };
+            EngineState::Playing => {
+                if let Some(ref mut game) = self.current_game {
+                    game.update(delta_time, &mut self.input, &mut self.audio, &mut self.saves);
+                }
+            }
+            EngineState::Loading { progress } => {
+                *progress += delta_time.as_secs_f32() * 0.5;
+                if *progress >= 1.0 {
+                    self.state = EngineState::Playing;
+                }
+            }
+        }
     }
 
     fn start_loading_game(&mut self, game_path: &Path) -> Result<(), CacaoError> {
@@ -350,7 +290,7 @@ impl CacaoEngine {
             EngineState::Browser {
                 games: vec![],
                 selected_index: 0,
-            }, // temporary placeholder
+            },
         );
 
         // Handle rendering

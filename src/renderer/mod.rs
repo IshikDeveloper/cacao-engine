@@ -18,20 +18,18 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     
-    // Rendering components
     sprite_renderer: SpriteRenderer,
     camera: Camera,
     
-    // Current render pass
     current_encoder: Option<wgpu::CommandEncoder>,
-    current_render_pass: Option<wgpu::RenderPass<'static>>,
+    current_output: Option<wgpu::SurfaceTexture>,
+    current_view: Option<wgpu::TextureView>,
 }
 
 impl Renderer {
     pub async fn new(window: &Window) -> Result<Self, CacaoError> {
         let size = window.inner_size();
         
-        // Create wgpu instance
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
@@ -84,7 +82,8 @@ impl Renderer {
             sprite_renderer,
             camera,
             current_encoder: None,
-            current_render_pass: None,
+            current_output: None,
+            current_view: None,
         })
     }
 
@@ -99,33 +98,54 @@ impl Renderer {
     }
 
     pub fn begin_frame(&mut self) -> Result<(), CacaoError> {
+        let output = self.surface.get_current_texture()
+            .map_err(|e| CacaoError::RenderError(format!("Failed to get surface texture: {}", e)))?;
+        
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        
         let encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
         
+        self.current_output = Some(output);
+        self.current_view = Some(view);
         self.current_encoder = Some(encoder);
+        
         Ok(())
     }
 
     pub fn end_frame(&mut self) -> Result<(), CacaoError> {
+        // Flush sprites before submitting
+        if let (Some(encoder), Some(view)) = (&mut self.current_encoder, &self.current_view) {
+            self.sprite_renderer.flush(
+                encoder,
+                view,
+                &self.device,
+                &self.queue,
+                &mut self.camera,
+            );
+        }
+        
+        // Submit commands
         if let Some(encoder) = self.current_encoder.take() {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
+        
+        // Present
+        if let Some(output) = self.current_output.take() {
+            output.present();
+        }
+        
+        self.current_view = None;
         Ok(())
     }
 
     pub fn clear_screen(&mut self, color: [f32; 4]) {
-        if let Some(encoder) = &mut self.current_encoder {
-            let output = self.surface.get_current_texture()
-                .map_err(|e| CacaoError::RenderError(format!("Failed to get surface texture: {}", e)))
-                .unwrap();
-            
-            let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-            
+        if let (Some(encoder), Some(view)) = (&mut self.current_encoder, &self.current_view) {
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: Some("Clear Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -139,8 +159,6 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: None,
             });
-            
-            output.present();
         }
     }
 
@@ -151,11 +169,13 @@ impl Renderer {
 
     pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, color: [f32; 4]) -> Result<(), CacaoError> {
         // TODO: Implement text rendering
+        log::warn!("Text rendering not yet implemented: {}", text);
         Ok(())
     }
 
     pub fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Result<(), CacaoError> {
         // TODO: Implement primitive rectangle drawing
+        log::warn!("Rectangle rendering not yet implemented");
         Ok(())
     }
 
@@ -171,4 +191,3 @@ impl Renderer {
         &self.queue
     }
 }
-
