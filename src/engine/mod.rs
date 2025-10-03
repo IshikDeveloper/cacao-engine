@@ -332,35 +332,47 @@ impl CacaoEngine {
         games: &[GameEntry],
         selected_index: usize,
     ) -> Result<(), CacaoError> {
-        // Dark background (1a1a1a)
+        // Dark background (#1a1a1a)
         self.renderer.clear_screen([0.102, 0.102, 0.102, 1.0]);
+
+        let white = [1.0, 1.0, 1.0, 1.0];
+        let yellow = [1.0, 1.0, 0.0, 1.0];
+        let gray = [0.5, 0.5, 0.5, 1.0];
+
+        // Title
+        self.renderer.draw_text("CACAO ENGINE - GAME BROWSER", 50.0, 50.0, 32.0, yellow)?;
+        
+        if games.is_empty() {
+            self.renderer.draw_text("No games found!", 50.0, 150.0, 24.0, white)?;
+            self.renderer.draw_text("Run: cargo run --example create_demo_game", 50.0, 200.0, 16.0, gray)?;
+        } else {
+            // Draw game list
+            let mut y = 150.0;
+            for (i, game) in games.iter().enumerate() {
+                let color = if i == selected_index { yellow } else { white };
+                let marker = if i == selected_index { ">>> " } else { "    " };
+                
+                let text = format!("{}{} - {} (v{})", 
+                    marker, 
+                    game.info.title, 
+                    game.info.author,
+                    game.info.version
+                );
+                
+                self.renderer.draw_text(&text, 50.0, y, 20.0, color)?;
+                y += 40.0;
+            }
+            
+            // Instructions
+            let instructions_y = y + 50.0;
+            self.renderer.draw_text("Arrow Keys: Navigate", 50.0, instructions_y, 16.0, gray)?;
+            self.renderer.draw_text("Enter: Load Game", 50.0, instructions_y + 30.0, 16.0, gray)?;
+        }
 
         // Only log once when entering browser
         if !self.browser_shown {
             self.browser_shown = true;
-            
-            if games.is_empty() {
-                log::warn!("===========================================");
-                log::warn!("NO GAMES FOUND!");
-                log::warn!("Run: cargo run --example create_demo_game");
-                log::warn!("===========================================");
-            } else {
-                log::info!("===========================================");
-                log::info!("CACAO ENGINE - GAME BROWSER");
-                log::info!("===========================================");
-                for (i, game) in games.iter().enumerate() {
-                    let marker = if i == selected_index { ">>>" } else { "   " };
-                    log::info!("{} {} - {} (v{})", 
-                        marker, 
-                        game.info.title, 
-                        game.info.author,
-                        game.info.version
-                    );
-                }
-                log::info!("===========================================");
-                log::info!("Use Arrow Keys to navigate, Enter to load");
-                log::info!("===========================================");
-            }
+            log::info!("Game browser displayed with {} games", games.len());
         }
 
         Ok(())
