@@ -3,6 +3,8 @@ pub mod shader;
 pub mod texture;
 pub mod sprite;
 pub mod camera;
+pub mod text;
+pub mod primitive;
 
 use winit::window::Window;
 use crate::errors::CacaoError;
@@ -10,6 +12,8 @@ use crate::errors::CacaoError;
 pub use texture::Texture;
 pub use sprite::{Sprite, SpriteRenderer};
 pub use camera::Camera;
+pub use text::TextRenderer;
+pub use primitive::PrimitiveRenderer;
 
 pub struct Renderer {
     surface: wgpu::Surface,
@@ -19,6 +23,8 @@ pub struct Renderer {
     size: winit::dpi::PhysicalSize<u32>,
     
     sprite_renderer: SpriteRenderer,
+    text_renderer: TextRenderer,
+    primitive_renderer: PrimitiveRenderer,
     camera: Camera,
     
     current_encoder: Option<wgpu::CommandEncoder>,
@@ -71,6 +77,8 @@ impl Renderer {
         surface.configure(&device, &config);
 
         let sprite_renderer = SpriteRenderer::new(&device, &config)?;
+        let text_renderer = TextRenderer::new(&device, &queue, &config)?;
+        let primitive_renderer = PrimitiveRenderer::new(&device, &config)?;
         let camera = Camera::new(size.width as f32, size.height as f32);
 
         Ok(Self {
@@ -80,6 +88,8 @@ impl Renderer {
             config,
             size,
             sprite_renderer,
+            text_renderer,
+            primitive_renderer,
             camera,
             current_encoder: None,
             current_output: None,
@@ -115,12 +125,27 @@ impl Renderer {
     }
 
     pub fn end_frame(&mut self) -> Result<(), CacaoError> {
-        // Flush sprites before submitting
+        // Flush all renderers in order: primitives -> sprites -> text
+        // This ensures proper layering (primitives in back, text in front)
         if let (Some(encoder), Some(view)) = (&mut self.current_encoder, &self.current_view) {
+            self.primitive_renderer.flush(
+                encoder,
+                view,
+                &self.queue,
+                &mut self.camera,
+            );
+            
             self.sprite_renderer.flush(
                 encoder,
                 view,
                 &self.device,
+                &self.queue,
+                &mut self.camera,
+            );
+            
+            self.text_renderer.flush(
+                encoder,
+                view,
                 &self.queue,
                 &mut self.camera,
             );
@@ -168,14 +193,37 @@ impl Renderer {
     }
 
     pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, color: [f32; 4]) -> Result<(), CacaoError> {
-        // TODO: Implement text rendering
-        log::warn!("Text rendering not yet implemented: {}", text);
+        self.text_renderer.draw_text(text, x, y, size, color);
         Ok(())
     }
 
     pub fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Result<(), CacaoError> {
-        // TODO: Implement primitive rectangle drawing
-        log::warn!("Rectangle rendering not yet implemented");
+        self.primitive_renderer.draw_rect(x, y, width, height, color);
+        Ok(())
+    }
+
+    pub fn draw_rect_outline(&mut self, x: f32, y: f32, width: f32, height: f32, thickness: f32, color: [f32; 4]) -> Result<(), CacaoError> {
+        self.primitive_renderer.draw_rect_outline(x, y, width, height, thickness, color);
+        Ok(())
+    }
+
+    pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: [f32; 4]) -> Result<(), CacaoError> {
+        self.primitive_renderer.draw_line(x1, y1, x2, y2, thickness, color);
+        Ok(())
+    }
+
+    pub fn draw_circle(&mut self, x: f32, y: f32, radius: f32, segments: u32, color: [f32; 4]) -> Result<(), CacaoError> {
+        self.primitive_renderer.draw_circle(x, y, radius, segments, color);
+        Ok(())
+    }
+
+    pub fn draw_circle_outline(&mut self, x: f32, y: f32, radius: f32, segments: u32, thickness: f32, color: [f32; 4]) -> Result<(), CacaoError> {
+        self.primitive_renderer.draw_circle_outline(x, y, radius, segments, thickness, color);
+        Ok(())
+    }
+
+    pub fn draw_triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, color: [f32; 4]) -> Result<(), CacaoError> {
+        self.primitive_renderer.draw_triangle(x1, y1, x2, y2, x3, y3, color);
         Ok(())
     }
 
