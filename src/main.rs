@@ -1,4 +1,6 @@
-// src/main.rs
+// ============================================================================
+// FILE: src/main.rs
+// ============================================================================
 use log::info;
 
 mod engine;
@@ -16,10 +18,8 @@ use engine::CacaoEngine;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
-    info!("Starting Cacao Engine...");
+    info!("🍫 Starting Cacao Engine v1.0.0...");
 
     let engine = CacaoEngine::new().await?;
-    
-    // run() never returns, so we never reach this point
     engine.run().await;
 }

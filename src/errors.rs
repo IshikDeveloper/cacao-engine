@@ -1,4 +1,6 @@
-// src/errors.rs
+// ============================================================================
+// FILE: src/errors.rs - Enhanced Error Handling
+// ============================================================================
 use std::fmt;
 use mlua::prelude::LuaError;
 
@@ -14,7 +16,7 @@ pub enum CacaoError {
 }
 
 impl fmt::Display for CacaoError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CacaoError::IoError(err) => write!(f, "IO Error: {}", err),
             CacaoError::RenderError(msg) => write!(f, "Render Error: {}", msg),
