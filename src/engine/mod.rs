@@ -26,6 +26,7 @@ struct GameEntry {
     banner_loaded: bool,
 }
 
+#[derive(Debug, Clone)]
 enum MenuState {
     MainMenu,
     GameList,
@@ -50,6 +51,7 @@ enum EngineState {
     },
 }
 
+#[derive(Clone)]
 struct MenuParticle {
     x: f32,
     y: f32,
@@ -257,97 +259,109 @@ impl CacaoEngine {
             return;
         }
 
-        match &mut self.state {
-            EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles } => {
-                // Update particles
-                for particle in particles.iter_mut() {
-                    particle.x += particle.vx * dt;
-                    particle.y += particle.vy * dt;
-                    particle.lifetime += dt;
+        // Clone state temporarily to avoid borrow issues
+        let needs_load_game = if let EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles } = &mut self.state {
+            // Update particles
+            for particle in particles.iter_mut() {
+                particle.x += particle.vx * dt;
+                particle.y += particle.vy * dt;
+                particle.lifetime += dt;
 
-                    // Wrap around screen
-                    if particle.x < 0.0 { particle.x = 1280.0; }
-                    if particle.x > 1280.0 { particle.x = 0.0; }
-                    if particle.y < 0.0 { particle.y = 720.0; }
-                    if particle.y > 720.0 { particle.y = 0.0; }
+                // Wrap around screen
+                if particle.x < 0.0 { particle.x = 1280.0; }
+                if particle.x > 1280.0 { particle.x = 0.0; }
+                if particle.y < 0.0 { particle.y = 720.0; }
+                if particle.y > 720.0 { particle.y = 0.0; }
 
-                    // Pulse effect
-                    let pulse = (particle.lifetime * 2.0).sin() * 0.3 + 0.7;
-                    particle.color[3] = pulse * 0.5;
+                // Pulse effect
+                let pulse = (particle.lifetime * 2.0).sin() * 0.3 + 0.7;
+                particle.color[3] = pulse * 0.5;
+            }
+
+            // Smooth transition
+            *transition_progress = (*transition_progress + dt * 3.0).min(1.0);
+
+            let mut load_game_path: Option<PathBuf> = None;
+
+            match state {
+                MenuState::MainMenu => {
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
+                        *state = MenuState::GameList;
+                        *transition_progress = 0.0;
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::S) {
+                        *state = MenuState::Settings;
+                        *transition_progress = 0.0;
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::A) {
+                        *state = MenuState::About;
+                        *transition_progress = 0.0;
+                    }
                 }
-
-                // Smooth transition
-                *transition_progress = (*transition_progress + dt * 3.0).min(1.0);
-
-                match state {
-                    MenuState::MainMenu => {
+                MenuState::GameList => {
+                    if !games.is_empty() {
+                        if self.input.is_key_just_pressed(VirtualKeyCode::Up) {
+                            if *selected_index > 0 {
+                                *selected_index -= 1;
+                            }
+                        }
+                        if self.input.is_key_just_pressed(VirtualKeyCode::Down) {
+                            if *selected_index < games.len() - 1 {
+                                *selected_index += 1;
+                            }
+                        }
                         if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
-                            *state = MenuState::GameList;
-                            *transition_progress = 0.0;
-                        }
-                        if self.input.is_key_just_pressed(VirtualKeyCode::S) {
-                            *state = MenuState::Settings;
-                            *transition_progress = 0.0;
-                        }
-                        if self.input.is_key_just_pressed(VirtualKeyCode::A) {
-                            *state = MenuState::About;
+                            *state = MenuState::GameDetails(*selected_index);
                             *transition_progress = 0.0;
                         }
                     }
-                    MenuState::GameList => {
-                        if !games.is_empty() {
-                            if self.input.is_key_just_pressed(VirtualKeyCode::Up) {
-                                if *selected_index > 0 {
-                                    *selected_index -= 1;
-                                }
-                            }
-                            if self.input.is_key_just_pressed(VirtualKeyCode::Down) {
-                                if *selected_index < games.len() - 1 {
-                                    *selected_index += 1;
-                                }
-                            }
-                            if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
-                                *state = MenuState::GameDetails(*selected_index);
-                                *transition_progress = 0.0;
-                            }
-                        }
-                        if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
-                            *state = MenuState::MainMenu;
-                            *transition_progress = 0.0;
-                        }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
+                        *state = MenuState::MainMenu;
+                        *transition_progress = 0.0;
+                    }
 
-                        // Smooth scrolling
-                        let target_scroll = (*selected_index as f32 * 120.0).max(0.0);
-                        *scroll_offset += (target_scroll - *scroll_offset) * dt * 10.0;
-                    }
-                    MenuState::GameDetails(idx) => {
-                        if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
-                            if let Some(game) = games.get(*idx) {
-                                let game_path = game.file_path.clone();
-                                if let Err(e) = self.start_loading_game(&game_path) {
-                                    log::error!("❌ Failed to load game: {}", e);
-                                }
-                            }
-                        }
-                        if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
-                            *state = MenuState::GameList;
-                            *transition_progress = 0.0;
+                    // Smooth scrolling
+                    let target_scroll = (*selected_index as f32 * 120.0).max(0.0);
+                    *scroll_offset += (target_scroll - *scroll_offset) * dt * 10.0;
+                }
+                MenuState::GameDetails(idx) => {
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
+                        if let Some(game) = games.get(*idx) {
+                            load_game_path = Some(game.file_path.clone());
                         }
                     }
-                    MenuState::Settings => {
-                        if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
-                            *state = MenuState::MainMenu;
-                            *transition_progress = 0.0;
-                        }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
+                        *state = MenuState::GameList;
+                        *transition_progress = 0.0;
                     }
-                    MenuState::About => {
-                        if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
-                            *state = MenuState::MainMenu;
-                            *transition_progress = 0.0;
-                        }
+                }
+                MenuState::Settings => {
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
+                        *state = MenuState::MainMenu;
+                        *transition_progress = 0.0;
+                    }
+                }
+                MenuState::About => {
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
+                        *state = MenuState::MainMenu;
+                        *transition_progress = 0.0;
                     }
                 }
             }
+
+            load_game_path
+        } else {
+            None
+        };
+
+        // Handle game loading outside the borrow
+        if let Some(game_path) = needs_load_game {
+            if let Err(e) = self.start_loading_game(&game_path) {
+                log::error!("❌ Failed to load game: {}", e);
+            }
+        }
+
+        match &mut self.state {
             EngineState::Playing => {
                 if let Some(ref mut game) = self.current_game {
                     game.update(delta_time, &mut self.input, &mut self.audio, &mut self.saves);
@@ -359,6 +373,7 @@ impl CacaoEngine {
                     self.state = EngineState::Playing;
                 }
             }
+            _ => {}
         }
     }
 
@@ -413,9 +428,17 @@ impl CacaoEngine {
     fn render(&mut self) -> Result<(), CacaoError> {
         self.renderer.begin_frame()?;
 
+        // Extract data from state to avoid borrow issues
         match &self.state {
             EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles } => {
-                self.render_stunning_menu(state, games, *selected_index, *scroll_offset, *transition_progress, particles)?;
+                let state_clone = state.clone();
+                let games_clone = games.clone();
+                let selected = *selected_index;
+                let scroll = *scroll_offset;
+                let progress = *transition_progress;
+                let particles_clone = particles.clone();
+                
+                self.render_stunning_menu(&state_clone, &games_clone, selected, scroll, progress, &particles_clone)?;
             }
             EngineState::Playing => {
                 if let Some(ref game) = self.current_game {
@@ -423,7 +446,9 @@ impl CacaoEngine {
                 }
             }
             EngineState::Loading { progress, status } => {
-                self.render_loading_screen(*progress, status)?;
+                let p = *progress;
+                let s = status.clone();
+                self.render_loading_screen(p, &s)?;
             }
         }
 

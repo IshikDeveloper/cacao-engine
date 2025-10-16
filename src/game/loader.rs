@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: src/game/loader.rs - Fixed Compiler Warnings
 // ============================================================================
-use super::{Game, GameInfo, GAEM_MAGIC, GAEM_VERSION, AssetType};
+use super::{Game, GameInfo, GAEM_MAGIC, GAEM_VERSION};
 use crate::{assets::AssetManager, errors::CacaoError};
 use std::fs::File;
 use std::io::Read;
