@@ -130,22 +130,43 @@ impl Renderer {
     }
 
     // FIX: Rewrite end_frame to create a single render pass and execute all drawing.
-    pub fn end_frame(&mut self) -> Result<(), CacaoError> {
-        if let (Some(encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
+pub fn end_frame(&mut self) -> Result<(), CacaoError> {
+        // FIX: Ensure 'encoder' is mutable when taken from self
+        if let (Some(mut encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
             
-            // 1. Create the single, main render pass, using LoadOp::Clear and the stored clear_color
+            // 1. Begin the single render pass
+            // FIX: 'encoder' must be mutable here to call begin_render_pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Main Render Pass"),
+                label: Some("Primary Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color), // Use stored clear color
-                        store: true,
+                        load: wgpu::LoadOp::Clear(self.clear_color), // Use the stored clear color
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
             });
+
+            // 2. Flush all renderers using the SAME render pass
+            self.primitive_renderer.flush(&mut render_pass, self.get_device(), self.get_queue(), &mut self.camera);
+            self.sprite_renderer.flush(&mut render_pass, self.get_device(), self.get_queue(), &mut self.camera);
+            self.text_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
+            
+            // 3. Render pass implicitly dropped here
+
+            // 4. Submit command buffer to the queue
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        // ... (rest of end_frame remains the same)
+        if let Some(output) = self.current_output.take() {
+            output.present();
+        }
+
+        Ok(())
+    }
             
             // 2. Flush renderers using the active pass (Draw order: primitives -> sprites -> text)
             // NOTE: The sub-renderer flush methods MUST be updated to accept &mut wgpu::RenderPass
