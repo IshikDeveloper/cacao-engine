@@ -1,4 +1,4 @@
-// src/renderer/primitive.rs
+// src/renderer/primitive.rs - FIXED SIGNATURE
 use wgpu::util::DeviceExt;
 use crate::errors::CacaoError;
 use super::Camera;
@@ -151,85 +151,49 @@ impl PrimitiveRenderer {
         })
     }
 
-    /// Draw a filled rectangle
     pub fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
         let vert_idx = self.vertices.len() as u16;
 
-        // Create quad vertices (two triangles)
-        self.vertices.push(PrimitiveVertex {
-            position: [x, y],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x + width, y],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x + width, y + height],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x, y + height],
-            color,
-        });
+        self.vertices.push(PrimitiveVertex { position: [x, y], color });
+        self.vertices.push(PrimitiveVertex { position: [x + width, y], color });
+        self.vertices.push(PrimitiveVertex { position: [x + width, y + height], color });
+        self.vertices.push(PrimitiveVertex { position: [x, y + height], color });
 
-        // Two triangles forming a rectangle
         self.indices.extend_from_slice(&[
             vert_idx, vert_idx + 1, vert_idx + 2,
             vert_idx + 2, vert_idx + 3, vert_idx,
         ]);
     }
 
-    /// Draw a rectangle outline
     pub fn draw_rect_outline(&mut self, x: f32, y: f32, width: f32, height: f32, thickness: f32, color: [f32; 4]) {
-        // Top edge
         self.draw_rect(x, y, width, thickness, color);
-        // Bottom edge
         self.draw_rect(x, y + height - thickness, width, thickness, color);
-        // Left edge
         self.draw_rect(x, y + thickness, thickness, height - 2.0 * thickness, color);
-        // Right edge
         self.draw_rect(x + width - thickness, y + thickness, thickness, height - 2.0 * thickness, color);
     }
 
-    /// Draw a line (implemented as a thin rectangle)
     pub fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: [f32; 4]) {
         let dx = x2 - x1;
         let dy = y2 - y1;
         let length = (dx * dx + dy * dy).sqrt();
         
         if length < 0.001 {
-            return; // Avoid division by zero
+            return;
         }
 
         let angle = dy.atan2(dx);
         let cos_a = angle.cos();
         let sin_a = angle.sin();
-
         let half_thickness = thickness / 2.0;
-
-        // Calculate the four corners of the line rectangle
         let perpx = -sin_a * half_thickness;
         let perpy = cos_a * half_thickness;
 
         let vert_idx = self.vertices.len() as u16;
 
-        self.vertices.push(PrimitiveVertex {
-            position: [x1 + perpx, y1 + perpy],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x2 + perpx, y2 + perpy],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x2 - perpx, y2 - perpy],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x1 - perpx, y1 - perpy],
-            color,
-        });
+        self.vertices.push(PrimitiveVertex { position: [x1 + perpx, y1 + perpy], color });
+        self.vertices.push(PrimitiveVertex { position: [x2 + perpx, y2 + perpy], color });
+        self.vertices.push(PrimitiveVertex { position: [x2 - perpx, y2 - perpy], color });
+        self.vertices.push(PrimitiveVertex { position: [x1 - perpx, y1 - perpy], color });
 
         self.indices.extend_from_slice(&[
             vert_idx, vert_idx + 1, vert_idx + 2,
@@ -237,30 +201,19 @@ impl PrimitiveRenderer {
         ]);
     }
 
-    /// Draw a circle (implemented as a polygon)
     pub fn draw_circle(&mut self, x: f32, y: f32, radius: f32, segments: u32, color: [f32; 4]) {
         if segments < 3 {
             return;
         }
 
         let center_idx = self.vertices.len() as u16;
-        
-        // Center vertex
-        self.vertices.push(PrimitiveVertex {
-            position: [x, y],
-            color,
-        });
+        self.vertices.push(PrimitiveVertex { position: [x, y], color });
 
-        // Perimeter vertices
         for i in 0..=segments {
             let angle = 2.0 * std::f32::consts::PI * (i as f32) / (segments as f32);
             let px = x + radius * angle.cos();
             let py = y + radius * angle.sin();
-            
-            self.vertices.push(PrimitiveVertex {
-                position: [px, py],
-                color,
-            });
+            self.vertices.push(PrimitiveVertex { position: [px, py], color });
 
             if i > 0 {
                 self.indices.extend_from_slice(&[
@@ -272,7 +225,6 @@ impl PrimitiveRenderer {
         }
     }
 
-    /// Draw a circle outline
     pub fn draw_circle_outline(&mut self, x: f32, y: f32, radius: f32, segments: u32, thickness: f32, color: [f32; 4]) {
         if segments < 3 {
             return;
@@ -291,30 +243,19 @@ impl PrimitiveRenderer {
         }
     }
 
-    /// Draw a triangle
     pub fn draw_triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, color: [f32; 4]) {
         let vert_idx = self.vertices.len() as u16;
 
-        self.vertices.push(PrimitiveVertex {
-            position: [x1, y1],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x2, y2],
-            color,
-        });
-        self.vertices.push(PrimitiveVertex {
-            position: [x3, y3],
-            color,
-        });
+        self.vertices.push(PrimitiveVertex { position: [x1, y1], color });
+        self.vertices.push(PrimitiveVertex { position: [x2, y2], color });
+        self.vertices.push(PrimitiveVertex { position: [x3, y3], color });
 
         self.indices.extend_from_slice(&[vert_idx, vert_idx + 1, vert_idx + 2]);
     }
 
     pub fn flush(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
+        render_pass: &mut wgpu::RenderPass,
         queue: &wgpu::Queue,
         camera: &mut Camera,
     ) {
@@ -322,44 +263,25 @@ impl PrimitiveRenderer {
             return;
         }
 
-        // Check if we exceeded buffer capacity
         if self.vertices.len() / 4 > self.max_primitives {
-            log::warn!("Primitive buffer overflow! Clamping to max capacity.");
             self.vertices.truncate(self.max_primitives * 4);
             self.indices.truncate(self.max_primitives * 6);
         }
 
-        // Update uniform
         let view_proj = camera.get_view_projection_matrix();
         let uniform = PrimitiveUniform {
             view_proj: view_proj.to_cols_array_2d(),
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
 
-        // Upload vertices and indices
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.vertices));
         queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&self.indices));
-
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Primitive Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
-        });
 
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
-
-        drop(render_pass);
 
         self.vertices.clear();
         self.indices.clear();
