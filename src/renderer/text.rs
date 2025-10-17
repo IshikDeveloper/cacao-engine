@@ -330,7 +330,7 @@ impl TextRenderer {
 
         // Try to load Rodin NTLG
         if let Ok(atlas) = Self::load_font_from_file(
-            "assets/fonts/RodinNTLG.ttf",
+            "assets/fonts/RodinNTLG.otf",
             device,
             queue,
             bind_group_layout
