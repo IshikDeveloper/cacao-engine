@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: src/engine/mod.rs - Stunning Main Menu UI
+// FILE: src/engine/mod.rs - Stunning Main Menu UI (FIXED & ENHANCED)
 // ============================================================================
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -19,6 +19,93 @@ use crate::{
     saves::SaveManager,
 };
 
+#[derive(Debug, Clone, PartialEq)]
+enum Theme {
+    Animated,    // Your gorgeous animated theme
+    Dark,        // Minimalist dark mode
+    Wii,         // Nostalgic Wii theme
+}
+
+impl Theme {
+    fn name(&self) -> &str {
+        match self {
+            Theme::Animated => "Animated Dreams",
+            Theme::Dark => "Dark Minimalist",
+            Theme::Wii => "Wii Classic",
+        }
+    }
+
+    // FIX: Helper to get all themes for selector
+    fn all() -> [Theme; 3] {
+        [Theme::Animated, Theme::Dark, Theme::Wii]
+    }
+
+    fn from_index(index: usize) -> Theme {
+        Self::all().get(index).cloned().unwrap_or(Theme::Animated)
+    }
+    // END FIX
+
+    fn background_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [0.05, 0.02, 0.15, 1.0],
+            Theme::Dark => [0.08, 0.08, 0.08, 1.0],
+            Theme::Wii => [0.95, 0.95, 0.95, 1.0], // White/light gray
+        }
+    }
+
+    fn accent_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [1.0, 0.6, 0.2, 1.0], // Orange
+            Theme::Dark => [0.3, 0.7, 1.0, 1.0],     // Blue
+            Theme::Wii => [0.4, 0.7, 1.0, 1.0],      // Wii blue
+        }
+    }
+
+    fn text_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [0.9, 0.9, 0.9, 1.0],
+            Theme::Dark => [0.95, 0.95, 0.95, 1.0],
+            Theme::Wii => [0.2, 0.2, 0.2, 1.0], // Dark gray for readability
+        }
+    }
+
+    fn secondary_text_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [0.7, 0.7, 0.8, 1.0],
+            Theme::Dark => [0.6, 0.6, 0.6, 1.0],
+            Theme::Wii => [0.4, 0.4, 0.4, 1.0],
+        }
+    }
+
+    fn card_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [0.15, 0.12, 0.20, 0.7],
+            Theme::Dark => [0.12, 0.12, 0.12, 0.9],
+            Theme::Wii => [1.0, 1.0, 1.0, 0.95], // White cards
+        }
+    }
+
+    fn selected_card_color(&self) -> [f32; 4] {
+        match self {
+            Theme::Animated => [0.25, 0.20, 0.35, 0.9],
+            Theme::Dark => [0.18, 0.18, 0.22, 1.0],
+            Theme::Wii => [0.85, 0.92, 1.0, 1.0], // Light blue
+        }
+    }
+
+    fn should_show_particles(&self) -> bool {
+        matches!(self, Theme::Animated)
+    }
+
+    fn font_name(&self) -> &str {
+        match self {
+            Theme::Animated => "PressStart2P", // Retro gaming font
+            Theme::Dark => "Roboto",            // Modern clean font
+            Theme::Wii => "RodinNTLG",         // Wii system font
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct GameEntry {
     info: GameInfo,
@@ -32,6 +119,7 @@ enum MenuState {
     GameList,
     GameDetails(usize),
     Settings,
+    ThemeSelector,
     About,
 }
 
@@ -43,6 +131,7 @@ enum EngineState {
         scroll_offset: f32,
         transition_progress: f32,
         particles: Vec<MenuParticle>,
+        theme_selector_index: usize,
     },
     Playing,
     Loading {
@@ -82,6 +171,7 @@ pub struct CacaoEngine {
     frame_count: u64,
     
     menu_animation_time: f32,
+    current_theme: Theme,
 }
 
 impl CacaoEngine {
@@ -125,6 +215,7 @@ impl CacaoEngine {
             scroll_offset: 0.0,
             transition_progress: 0.0,
             particles,
+            theme_selector_index: 0,
         };
 
         Ok(Self {
@@ -144,6 +235,7 @@ impl CacaoEngine {
             target_fps: 60,
             frame_count: 0,
             menu_animation_time: 0.0,
+            current_theme: Theme::Animated, // Start with animated theme
         })
     }
 
@@ -260,22 +352,24 @@ impl CacaoEngine {
         }
 
         // Clone state temporarily to avoid borrow issues
-        let needs_load_game = if let EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles } = &mut self.state {
-            // Update particles
-            for particle in particles.iter_mut() {
-                particle.x += particle.vx * dt;
-                particle.y += particle.vy * dt;
-                particle.lifetime += dt;
+        let needs_load_game = if let EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles, theme_selector_index } = &mut self.state {
+            // Update particles only for animated theme
+            if self.current_theme.should_show_particles() {
+                for particle in particles.iter_mut() {
+                    particle.x += particle.vx * dt;
+                    particle.y += particle.vy * dt;
+                    particle.lifetime += dt;
 
-                // Wrap around screen
-                if particle.x < 0.0 { particle.x = 1280.0; }
-                if particle.x > 1280.0 { particle.x = 0.0; }
-                if particle.y < 0.0 { particle.y = 720.0; }
-                if particle.y > 720.0 { particle.y = 0.0; }
+                    // Wrap around screen
+                    if particle.x < 0.0 { particle.x = 1280.0; }
+                    if particle.x > 1280.0 { particle.x = 0.0; }
+                    if particle.y < 0.0 { particle.y = 720.0; }
+                    if particle.y > 720.0 { particle.y = 0.0; }
 
-                // Pulse effect
-                let pulse = (particle.lifetime * 2.0).sin() * 0.3 + 0.7;
-                particle.color[3] = pulse * 0.5;
+                    // Pulse effect
+                    let pulse = (particle.lifetime * 2.0).sin() * 0.3 + 0.7;
+                    particle.color[3] = pulse * 0.5;
+                }
             }
 
             // Smooth transition
@@ -291,6 +385,10 @@ impl CacaoEngine {
                     }
                     if self.input.is_key_just_pressed(VirtualKeyCode::S) {
                         *state = MenuState::Settings;
+                        *transition_progress = 0.0;
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::T) {
+                        *state = MenuState::ThemeSelector;
                         *transition_progress = 0.0;
                     }
                     if self.input.is_key_just_pressed(VirtualKeyCode::A) {
@@ -332,6 +430,31 @@ impl CacaoEngine {
                     }
                     if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
                         *state = MenuState::GameList;
+                        *transition_progress = 0.0;
+                    }
+                }
+                MenuState::ThemeSelector => {
+                    // FIX: Use Theme::all().len() for dynamic theme count
+                    let num_themes = Theme::all().len(); 
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Up) {
+                        if *theme_selector_index > 0 {
+                            *theme_selector_index -= 1;
+                        }
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Down) {
+                        if *theme_selector_index < num_themes - 1 {
+                            *theme_selector_index += 1;
+                        }
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Return) {
+                        // FIX: Use Theme::from_index helper
+                        self.current_theme = Theme::from_index(*theme_selector_index);
+                        log::info!("🎨 Theme changed to: {}", self.current_theme.name());
+                        *state = MenuState::MainMenu;
+                        *transition_progress = 0.0;
+                    }
+                    if self.input.is_key_just_pressed(VirtualKeyCode::Escape) {
+                        *state = MenuState::MainMenu;
                         *transition_progress = 0.0;
                     }
                 }
@@ -420,6 +543,7 @@ impl CacaoEngine {
             scroll_offset: 0.0,
             transition_progress: 0.0,
             particles,
+            theme_selector_index: 0,
         };
 
         self.window.set_title("Cacao Engine");
@@ -430,7 +554,7 @@ impl CacaoEngine {
 
         // Extract data from state to avoid borrow issues
         match &self.state {
-            EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles } => {
+            EngineState::Menu { state, games, selected_index, scroll_offset, transition_progress, particles, .. } => {
                 let state_clone = state.clone();
                 let games_clone = games.clone();
                 let selected = *selected_index;
@@ -465,25 +589,46 @@ impl CacaoEngine {
         progress: f32,
         particles: &[MenuParticle],
     ) -> Result<(), CacaoError> {
-        // Gorgeous gradient background
-        let time = self.menu_animation_time;
-        let bg_color1 = [
-            0.05 + (time * 0.5).sin() * 0.02,
-            0.02 + (time * 0.3).sin() * 0.02,
-            0.15 + (time * 0.4).sin() * 0.03,
-            1.0
-        ];
-        self.renderer.clear_screen(bg_color1);
+        // Theme-aware background
+        let theme = &self.current_theme;
+        
+        if matches!(theme, Theme::Animated) {
+            // Gorgeous gradient background for animated theme
+            let time = self.menu_animation_time;
+            let bg_color1 = [
+                0.05 + (time * 0.5).sin() * 0.02,
+                0.02 + (time * 0.3).sin() * 0.02,
+                0.15 + (time * 0.4).sin() * 0.03,
+                1.0
+            ];
+            self.renderer.clear_screen(bg_color1);
+        } else {
+            // Static background for other themes
+            self.renderer.clear_screen(theme.background_color());
+        }
 
-        // Draw animated particles
-        for particle in particles {
-            self.renderer.draw_circle(
-                particle.x,
-                particle.y,
-                particle.size,
-                16,
-                particle.color
-            )?;
+        // Draw animated particles only for animated theme
+        if theme.should_show_particles() {
+            for particle in particles {
+                self.renderer.draw_circle(
+                    particle.x,
+                    particle.y,
+                    particle.size,
+                    16,
+                    particle.color
+                )?;
+            }
+        }
+
+        // Wii theme: Draw channel-style grid lines
+        if matches!(theme, Theme::Wii) {
+            for i in 0..10 {
+                let y = 100.0 + i as f32 * 60.0;
+                self.renderer.draw_line(
+                    80.0, y, 1200.0, y, 1.0,
+                    [0.85, 0.85, 0.85, 0.3]
+                )?;
+            }
         }
 
         // Smooth fade-in effect
@@ -491,37 +636,47 @@ impl CacaoEngine {
 
         match menu_state {
             MenuState::MainMenu => {
-                self.render_main_menu(alpha)?;
+                // FIX: Pass theme to rendering function
+                self.render_main_menu(alpha, theme)?;
             }
             MenuState::GameList => {
-                self.render_game_list(games, selected_index, scroll_offset, alpha)?;
+                self.render_game_list(games, selected_index, scroll_offset, alpha, theme)?;
             }
             MenuState::GameDetails(idx) => {
+                // FIX: Pass theme to rendering function
                 if let Some(game) = games.get(*idx) {
-                    self.render_game_details(&game.info, alpha)?;
+                    self.render_game_details(&game.info, alpha, theme)?;
                 }
             }
+            MenuState::ThemeSelector => {
+                // FIX: Call the missing function
+                self.render_theme_selector(alpha, theme)?;
+            }
             MenuState::Settings => {
-                self.render_settings(alpha)?;
+                // FIX: Pass theme to rendering function
+                self.render_settings(alpha, theme)?;
             }
             MenuState::About => {
-                self.render_about(alpha)?;
+                // FIX: Pass theme to rendering function
+                self.render_about(alpha, theme)?;
             }
         }
 
         Ok(())
     }
 
-    fn render_main_menu(&mut self, alpha: f32) -> Result<(), CacaoError> {
-        let title_color = [1.0, 0.9, 0.4, alpha];
-        let text_color = [0.9, 0.9, 0.9, alpha * 0.9];
-        let accent_color = [1.0, 0.6, 0.2, alpha];
+    fn render_main_menu(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+        // FIX: Use theme colors
+        let title_color = theme.accent_color(); 
+        let text_color = theme.text_color();
+        let accent_color = theme.accent_color();
+        let secondary_text = theme.secondary_text_color();
 
         // Animated title with glow effect
         let pulse = (self.menu_animation_time * 2.0).sin() * 0.1 + 0.9;
         let title_size = 64.0 * pulse;
         
-        // Title glow
+        // Title glow - Use theme accent color
         for i in 0..3 {
             let offset = (i as f32 + 1.0) * 2.0;
             let glow_alpha = alpha * (0.3 - i as f32 * 0.1);
@@ -535,28 +690,30 @@ impl CacaoEngine {
         }
         
         // Main title
-        self.renderer.draw_text("CACAO ENGINE", 320.0, 100.0, title_size, title_color)?;
+        self.renderer.draw_text("CACAO ENGINE", 320.0, 100.0, title_size, [title_color[0], title_color[1], title_color[2], title_color[3] * alpha])?;
         
-        // Subtitle
+        // Subtitle - Use secondary text color
         self.renderer.draw_text(
             "v1.0.0 - The Ultimate Game Engine",
             380.0,
             180.0,
             20.0,
-            [0.7, 0.7, 0.8, alpha * 0.8]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.8]
         )?;
 
         // Decorative line
-        self.renderer.draw_rect(200.0, 220.0, 880.0, 3.0, accent_color)?;
+        self.renderer.draw_rect(200.0, 220.0, 880.0, 3.0, [accent_color[0], accent_color[1], accent_color[2], accent_color[3] * alpha])?;
 
         // Menu options with bounce animation
         let base_y = 300.0;
         let bounce = (self.menu_animation_time * 4.0).sin().abs() * 5.0;
         
-        self.renderer.draw_text("▶ [ENTER] PLAY GAMES", 450.0, base_y + bounce, 28.0, accent_color)?;
-        self.renderer.draw_text("  [S] Settings", 450.0, base_y + 50.0, 24.0, text_color)?;
-        self.renderer.draw_text("  [A] About", 450.0, base_y + 90.0, 24.0, text_color)?;
-        self.renderer.draw_text("  [ESC] Exit", 450.0, base_y + 130.0, 24.0, text_color)?;
+        // Use theme colors for menu items
+        self.renderer.draw_text("▶ [ENTER] PLAY GAMES", 450.0, base_y + bounce, 28.0, [accent_color[0], accent_color[1], accent_color[2], accent_color[3] * alpha])?;
+        self.renderer.draw_text("  [S] Settings", 450.0, base_y + 50.0, 24.0, [text_color[0], text_color[1], text_color[2], text_color[3] * alpha])?;
+        self.renderer.draw_text("  [T] Themes", 450.0, base_y + 90.0, 24.0, [text_color[0], text_color[1], text_color[2], text_color[3] * alpha])?;
+        self.renderer.draw_text("  [A] About", 450.0, base_y + 130.0, 24.0, [text_color[0], text_color[1], text_color[2], text_color[3] * alpha])?;
+        self.renderer.draw_text("  [ESC] Exit", 450.0, base_y + 170.0, 24.0, [text_color[0], text_color[1], text_color[2], text_color[3] * alpha])?;
 
         // Footer info with fade
         let footer_alpha = alpha * ((self.menu_animation_time * 1.5).sin() * 0.3 + 0.7);
@@ -565,7 +722,7 @@ impl CacaoEngine {
             450.0,
             650.0,
             18.0,
-            [0.6, 0.6, 0.7, footer_alpha]
+            [secondary_text[0], secondary_text[1], secondary_text[2], footer_alpha]
         )?;
 
         Ok(())
@@ -577,11 +734,16 @@ impl CacaoEngine {
         selected_index: usize,
         scroll_offset: f32,
         alpha: f32,
+        theme: &Theme, // Use theme
     ) -> Result<(), CacaoError> {
+        let accent = theme.accent_color();
+        let text_color = theme.text_color();
+        let secondary_text = theme.secondary_text_color();
+
         // Header
-        let header_color = [1.0, 0.9, 0.4, alpha];
+        let header_color = [accent[0], accent[1], accent[2], accent[3] * alpha];
         self.renderer.draw_text("GAME LIBRARY", 80.0, 50.0, 48.0, header_color)?;
-        self.renderer.draw_rect(80.0, 110.0, 1120.0, 2.0, [1.0, 0.6, 0.2, alpha])?;
+        self.renderer.draw_rect(80.0, 110.0, 1120.0, 2.0, header_color)?;
 
         if games.is_empty() {
             // Empty state
@@ -590,14 +752,14 @@ impl CacaoEngine {
                 450.0,
                 300.0,
                 32.0,
-                [0.9, 0.9, 0.9, alpha * 0.8]
+                [text_color[0], text_color[1], text_color[2], text_color[3] * alpha * 0.8]
             )?;
             self.renderer.draw_text(
                 "Create a game with: cargo run --example create_demo_game",
                 250.0,
                 350.0,
                 16.0,
-                [0.7, 0.7, 0.8, alpha * 0.7]
+                [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
             )?;
         } else {
             // Game cards with beautiful design
@@ -615,10 +777,15 @@ impl CacaoEngine {
                 
                 // Card background with glow
                 let card_color = if is_selected {
-                    let pulse = (self.menu_animation_time * 6.0).sin() * 0.1 + 0.3;
-                    [0.2 + pulse, 0.15 + pulse * 0.5, 0.3 + pulse, alpha * 0.9]
+                    let pulse = (self.menu_animation_time * 6.0).sin() * 0.1 + 0.9;
+                    [
+                        theme.selected_card_color()[0] * pulse, 
+                        theme.selected_card_color()[1] * pulse, 
+                        theme.selected_card_color()[2] * pulse, 
+                        theme.selected_card_color()[3] * alpha
+                    ]
                 } else {
-                    [0.15, 0.12, 0.20, alpha * 0.7]
+                    [theme.card_color()[0], theme.card_color()[1], theme.card_color()[2], theme.card_color()[3] * alpha * 0.7]
                 };
                 
                 // Card shadow
@@ -631,9 +798,9 @@ impl CacaoEngine {
                 
                 // Card border
                 let border_color = if is_selected {
-                    [1.0, 0.6, 0.2, alpha]
+                    accent
                 } else {
-                    [0.3, 0.3, 0.4, alpha * 0.5]
+                    [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.5]
                 };
                 self.renderer.draw_rect_outline(80.0, y, 1104.0, 96.0, 2.0, border_color)?;
 
@@ -645,15 +812,15 @@ impl CacaoEngine {
                         indicator_x,
                         y + 35.0,
                         32.0,
-                        [1.0, 0.8, 0.2, alpha]
+                        [accent[0], accent[1], accent[2], accent[3] * alpha]
                     )?;
                 }
 
                 // Game info
-                let title_color = if is_selected {
-                    [1.0, 1.0, 1.0, alpha]
+                let title_text_color = if is_selected {
+                    text_color
                 } else {
-                    [0.9, 0.9, 0.9, alpha * 0.9]
+                    [text_color[0], text_color[1], text_color[2], text_color[3] * alpha * 0.9]
                 };
                 
                 self.renderer.draw_text(
@@ -661,7 +828,7 @@ impl CacaoEngine {
                     110.0,
                     y + 20.0,
                     24.0,
-                    title_color
+                    title_text_color
                 )?;
                 
                 let info_text = format!("{} • v{}", game.info.author, game.info.version);
@@ -670,7 +837,7 @@ impl CacaoEngine {
                     110.0,
                     y + 50.0,
                     16.0,
-                    [0.7, 0.7, 0.8, alpha * 0.8]
+                    [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.8]
                 )?;
             }
         }
@@ -681,16 +848,18 @@ impl CacaoEngine {
             350.0,
             680.0,
             16.0,
-            [0.7, 0.7, 0.8, alpha * 0.7]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
         )?;
 
         Ok(())
     }
 
-    fn render_game_details(&mut self, info: &GameInfo, alpha: f32) -> Result<(), CacaoError> {
-        // Beautiful detail view with animated elements
-        let accent = [1.0, 0.6, 0.2, alpha];
-        let text = [0.9, 0.9, 0.9, alpha];
+    fn render_game_details(&mut self, info: &GameInfo, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+        // FIX: Use theme colors
+        let accent = theme.accent_color();
+        let text = theme.text_color();
+        let card = theme.card_color();
+        let secondary_text = theme.secondary_text_color();
         
         // Banner area (placeholder for future banner images)
         let banner_y = 100.0;
@@ -700,7 +869,7 @@ impl CacaoEngine {
             banner_y,
             1000.0,
             300.0 * pulse,
-            [0.2, 0.15, 0.25, alpha * 0.8]
+            [card[0], card[1], card[2], card[3] * alpha * 0.8]
         )?;
         self.renderer.draw_rect_outline(140.0, banner_y, 1000.0, 300.0, 3.0, accent)?;
         
@@ -710,7 +879,7 @@ impl CacaoEngine {
             300.0,
             230.0,
             48.0,
-            [1.0, 1.0, 1.0, alpha]
+            [text[0], text[1], text[2], text[3] * alpha]
         )?;
 
         // Game details panel
@@ -720,20 +889,20 @@ impl CacaoEngine {
         
         let mut info_y = details_y + 60.0;
         
-        self.renderer.draw_text("Author:", 140.0, info_y, 20.0, [0.7, 0.7, 0.8, alpha])?;
+        self.renderer.draw_text("Author:", 140.0, info_y, 20.0, secondary_text)?;
         self.renderer.draw_text(&info.author, 300.0, info_y, 20.0, text)?;
         info_y += 35.0;
         
-        self.renderer.draw_text("Version:", 140.0, info_y, 20.0, [0.7, 0.7, 0.8, alpha])?;
+        self.renderer.draw_text("Version:", 140.0, info_y, 20.0, secondary_text)?;
         self.renderer.draw_text(&info.version, 300.0, info_y, 20.0, text)?;
         info_y += 35.0;
         
-        self.renderer.draw_text("Engine:", 140.0, info_y, 20.0, [0.7, 0.7, 0.8, alpha])?;
+        self.renderer.draw_text("Engine:", 140.0, info_y, 20.0, secondary_text)?;
         self.renderer.draw_text(&info.engine_version, 300.0, info_y, 20.0, text)?;
 
         // Description box
         let desc_y = details_y;
-        self.renderer.draw_rect(600.0, desc_y, 540.0, 200.0, [0.15, 0.12, 0.20, alpha * 0.8])?;
+        self.renderer.draw_rect(600.0, desc_y, 540.0, 200.0, [card[0], card[1], card[2], card[3] * alpha * 0.8])?;
         self.renderer.draw_rect_outline(600.0, desc_y, 540.0, 200.0, 2.0, accent)?;
         self.renderer.draw_text("Description", 620.0, desc_y + 20.0, 20.0, accent)?;
         self.renderer.draw_text(&info.description, 620.0, desc_y + 60.0, 16.0, text)?;
@@ -746,7 +915,7 @@ impl CacaoEngine {
             button_y,
             280.0 + button_pulse,
             60.0,
-            [0.3, 0.2, 0.4, alpha]
+            [theme.selected_card_color()[0], theme.selected_card_color()[1], theme.selected_card_color()[2], theme.selected_card_color()[3] * alpha]
         )?;
         self.renderer.draw_rect_outline(
             500.0 - button_pulse / 2.0,
@@ -770,15 +939,68 @@ impl CacaoEngine {
             530.0,
             710.0,
             16.0,
-            [0.7, 0.7, 0.8, alpha * 0.7]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
         )?;
 
         Ok(())
     }
 
-    fn render_settings(&mut self, alpha: f32) -> Result<(), CacaoError> {
-        let accent = [1.0, 0.6, 0.2, alpha];
-        let text = [0.9, 0.9, 0.9, alpha];
+    // FIX: Missing function implementation for Theme Selector
+    fn render_theme_selector(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+        let text_color = theme.text_color();
+        let accent = theme.accent_color();
+        let secondary_text = theme.secondary_text_color();
+
+        self.renderer.draw_text("THEME SELECTOR", 80.0, 80.0, 48.0, accent)?;
+        self.renderer.draw_rect(80.0, 140.0, 500.0, 2.0, accent)?;
+
+        let theme_options = Theme::all();
+
+        if let EngineState::Menu { theme_selector_index, .. } = self.state {
+            let mut y = 220.0;
+            for (i, t) in theme_options.iter().enumerate() {
+                let is_selected = i == *theme_selector_index;
+                let color = if is_selected { accent } else { text_color };
+                let size = if is_selected { 32.0 } else { 24.0 };
+
+                // Draw card background
+                let card_color = if is_selected { theme.selected_card_color() } else { theme.card_color() };
+                self.renderer.draw_rect(100.0, y, 500.0, 50.0, [card_color[0], card_color[1], card_color[2], card_color[3] * alpha])?;
+                
+                // Draw selection indicator
+                if is_selected {
+                    let indicator_x = 60.0 + (self.menu_animation_time * 4.0).sin() * 3.0;
+                    self.renderer.draw_text("▶", indicator_x, y + 10.0, size, accent)?;
+                }
+
+                // Draw theme name
+                self.renderer.draw_text(
+                    t.name(),
+                    120.0,
+                    y + 15.0,
+                    size,
+                    [color[0], color[1], color[2], color[3] * alpha]
+                )?;
+
+                y += 70.0;
+            }
+        }
+
+        self.renderer.draw_text(
+            "[ENTER] Apply Theme • [ESC] Back",
+            300.0,
+            680.0,
+            16.0,
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
+        )?;
+
+        Ok(())
+    }
+
+    fn render_settings(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+        let accent = theme.accent_color();
+        let text = theme.text_color();
+        let secondary_text = theme.secondary_text_color();
         
         self.renderer.draw_text("SETTINGS", 80.0, 80.0, 48.0, accent)?;
         self.renderer.draw_rect(80.0, 140.0, 300.0, 2.0, accent)?;
@@ -786,27 +1008,27 @@ impl CacaoEngine {
         let mut y = 200.0;
         self.renderer.draw_text("Audio", 100.0, y, 28.0, text)?;
         y += 50.0;
-        self.renderer.draw_text("Master Volume: 100%", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("Master Volume: 100%", 120.0, y, 20.0, secondary_text)?;
         y += 35.0;
-        self.renderer.draw_text("Music Volume: 80%", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("Music Volume: 80%", 120.0, y, 20.0, secondary_text)?;
         y += 35.0;
-        self.renderer.draw_text("SFX Volume: 100%", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("SFX Volume: 100%", 120.0, y, 20.0, secondary_text)?;
         
         y += 80.0;
         self.renderer.draw_text("Graphics", 100.0, y, 28.0, text)?;
         y += 50.0;
-        self.renderer.draw_text("Resolution: 1280x720", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("Resolution: 1280x720", 120.0, y, 20.0, secondary_text)?;
         y += 35.0;
-        self.renderer.draw_text("Fullscreen: Off", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("Fullscreen: Off", 120.0, y, 20.0, secondary_text)?;
         y += 35.0;
-        self.renderer.draw_text("VSync: On", 120.0, y, 20.0, [0.8, 0.8, 0.9, alpha])?;
+        self.renderer.draw_text("VSync: On", 120.0, y, 20.0, secondary_text)?;
 
         self.renderer.draw_text(
             "(Settings coming soon!)",
             480.0,
             350.0,
             24.0,
-            [0.7, 0.7, 0.8, alpha * 0.6]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.6]
         )?;
 
         self.renderer.draw_text(
@@ -814,15 +1036,16 @@ impl CacaoEngine {
             490.0,
             680.0,
             16.0,
-            [0.7, 0.7, 0.8, alpha * 0.7]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
         )?;
 
         Ok(())
     }
 
-    fn render_about(&mut self, alpha: f32) -> Result<(), CacaoError> {
-        let accent = [1.0, 0.6, 0.2, alpha];
-        let text = [0.9, 0.9, 0.9, alpha];
+    fn render_about(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+        let accent = theme.accent_color();
+        let text = theme.text_color();
+        let secondary_text = theme.secondary_text_color();
         
         // Animated logo area
         let logo_pulse = (self.menu_animation_time * 2.0).sin() * 0.1 + 0.9;
@@ -831,7 +1054,7 @@ impl CacaoEngine {
             200.0,
             80.0 * logo_pulse,
             32,
-            [0.3, 0.2, 0.4, alpha * 0.8]
+            [theme.selected_card_color()[0], theme.selected_card_color()[1], theme.selected_card_color()[2], theme.selected_card_color()[3] * alpha * 0.8]
         )?;
         self.renderer.draw_circle_outline(
             640.0,
@@ -842,7 +1065,7 @@ impl CacaoEngine {
             accent
         )?;
         
-        self.renderer.draw_text("🍫", 605.0, 170.0, 64.0, [1.0, 0.9, 0.4, alpha])?;
+        self.renderer.draw_text("🍫", 605.0, 170.0, 64.0, [accent[0], accent[1], accent[2], accent[3] * alpha])?;
 
         self.renderer.draw_text("CACAO ENGINE", 490.0, 320.0, 36.0, accent)?;
         self.renderer.draw_text("Version 1.0.0", 545.0, 365.0, 20.0, text)?;
@@ -853,7 +1076,7 @@ impl CacaoEngine {
             460.0,
             info_y,
             18.0,
-            [0.8, 0.8, 0.9, alpha]
+            secondary_text
         )?;
         info_y += 30.0;
         self.renderer.draw_text(
@@ -861,7 +1084,7 @@ impl CacaoEngine {
             465.0,
             info_y,
             18.0,
-            [0.8, 0.8, 0.9, alpha]
+            secondary_text
         )?;
 
         info_y += 60.0;
@@ -886,7 +1109,7 @@ impl CacaoEngine {
             500.0,
             650.0,
             18.0,
-            [0.7, 0.7, 0.8, alpha]
+            secondary_text
         )?;
 
         self.renderer.draw_text(
@@ -894,7 +1117,7 @@ impl CacaoEngine {
             490.0,
             690.0,
             16.0,
-            [0.7, 0.7, 0.8, alpha * 0.7]
+            [secondary_text[0], secondary_text[1], secondary_text[2], secondary_text[3] * alpha * 0.7]
         )?;
 
         Ok(())

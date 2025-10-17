@@ -1,4 +1,4 @@
-// src/renderer/mod.rs
+// src/renderer/mod.rs (FIXED)
 pub mod shader;
 pub mod texture;
 pub mod sprite;
@@ -26,6 +26,9 @@ pub struct Renderer {
     text_renderer: TextRenderer,
     primitive_renderer: PrimitiveRenderer,
     camera: Camera,
+    
+    // FIX: Field to store the clear color instead of using a temporary pass
+    clear_color: wgpu::Color, 
     
     current_encoder: Option<wgpu::CommandEncoder>,
     current_output: Option<wgpu::SurfaceTexture>,
@@ -91,6 +94,8 @@ impl Renderer {
             text_renderer,
             primitive_renderer,
             camera,
+            // FIX: Initialize the clear color (default to black)
+            clear_color: wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, 
             current_encoder: None,
             current_output: None,
             current_view: None,
@@ -124,35 +129,49 @@ impl Renderer {
         Ok(())
     }
 
+    // FIX: Rewrite end_frame to create a single render pass and execute all drawing.
     pub fn end_frame(&mut self) -> Result<(), CacaoError> {
-        // Flush all renderers in order: primitives -> sprites -> text
-        // This ensures proper layering (primitives in back, text in front)
-        if let (Some(encoder), Some(view)) = (&mut self.current_encoder, &self.current_view) {
+        if let (Some(encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
+            
+            // 1. Create the single, main render pass, using LoadOp::Clear and the stored clear_color
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Main Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color), // Use stored clear color
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+            
+            // 2. Flush renderers using the active pass (Draw order: primitives -> sprites -> text)
+            // NOTE: The sub-renderer flush methods MUST be updated to accept &mut wgpu::RenderPass
             self.primitive_renderer.flush(
-                encoder,
-                view,
+                &mut render_pass,
                 &self.queue,
                 &mut self.camera,
             );
             
             self.sprite_renderer.flush(
-                encoder,
-                view,
+                &mut render_pass,
                 &self.device,
                 &self.queue,
                 &mut self.camera,
             );
             
             self.text_renderer.flush(
-                encoder,
-                view,
+                &mut render_pass,
                 &self.queue,
                 &mut self.camera,
             );
-        }
-        
-        // Submit commands
-        if let Some(encoder) = self.current_encoder.take() {
+            
+            // 3. Drop the render pass to end it
+            drop(render_pass); 
+            
+            // 4. Submit commands
             self.queue.submit(std::iter::once(encoder.finish()));
         }
         
@@ -161,30 +180,17 @@ impl Renderer {
             output.present();
         }
         
-        self.current_view = None;
         Ok(())
     }
 
+    // FIX: Update clear_screen to only set the clear_color field
     pub fn clear_screen(&mut self, color: [f32; 4]) {
-        if let (Some(encoder), Some(view)) = (&mut self.current_encoder, &self.current_view) {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Clear Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: color[0] as f64,
-                            g: color[1] as f64,
-                            b: color[2] as f64,
-                            a: color[3] as f64,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-        }
+        self.clear_color = wgpu::Color {
+            r: color[0] as f64,
+            g: color[1] as f64,
+            b: color[2] as f64,
+            a: color[3] as f64,
+        };
     }
 
     pub fn draw_sprite(&mut self, sprite: &Sprite, x: f32, y: f32, rotation: f32, scale: f32) -> Result<(), CacaoError> {
