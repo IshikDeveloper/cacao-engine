@@ -1,4 +1,6 @@
-// src/renderer/sprite.rs
+// ============================================================================
+// FILE: src/renderer/sprite.rs - FIXED SIGNATURE AND RENDER PASS USAGE
+// ============================================================================
 use wgpu::util::DeviceExt;
 use crate::{errors::CacaoError, renderer::Camera};
 use super::Texture;
@@ -216,10 +218,10 @@ impl SpriteRenderer {
         });
     }
 
+    // FIX: Updated signature and body to use the single shared wgpu::RenderPass
     pub fn flush(
         &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
+        render_pass: &mut wgpu::RenderPass,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         camera: &mut Camera,
@@ -230,7 +232,7 @@ impl SpriteRenderer {
         
         let view_proj = camera.get_view_projection_matrix();
         
-        // Create bind groups OUTSIDE the render pass to avoid lifetime issues
+        // Create bind groups OUTSIDE the render pass
         let mut bind_groups = Vec::new();
         
         for draw_call in &self.sprite_queue {
@@ -242,15 +244,17 @@ impl SpriteRenderer {
             
             queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
             
+            // Create uniform bind group
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: self.uniform_buffer.as_entire_binding(),
                 }],
-                label: Some("Uniform Bind Group"),
+                label: Some("Sprite Uniform Bind Group (Per Draw)"),
             });
             
+            // Create texture bind group
             let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
                 entries: &[
@@ -263,26 +267,13 @@ impl SpriteRenderer {
                         resource: wgpu::BindingResource::Sampler(draw_call.texture.sampler()),
                     },
                 ],
-                label: Some("Texture Bind Group"),
+                label: Some("Sprite Texture Bind Group"),
             });
             
             bind_groups.push((uniform_bind_group, texture_bind_group));
         }
         
-        // NOW create the render pass
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Sprite Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
-        });
-        
+        // Use the passed render_pass to set state and draw
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -293,7 +284,6 @@ impl SpriteRenderer {
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
         
-        drop(render_pass);
         self.sprite_queue.clear();
     }
 }

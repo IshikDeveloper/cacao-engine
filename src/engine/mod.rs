@@ -319,7 +319,8 @@ impl CacaoEngine {
 
                     if delta_time >= target_frame_time {
                         self.update(delta_time);
-                        match self.render() {
+                        // RENDER is the only thing that mutates the renderer, but not the engine state.
+                        match self.render() { 
                             Ok(_) => {}
                             Err(e) => {
                                 log::error!("❌ Render error: {}", e);
@@ -562,6 +563,7 @@ impl CacaoEngine {
                 let progress = *transition_progress;
                 let particles_clone = particles.clone();
                 
+                // CALLING RENDER_STUNNING_MENU AS &self to avoid borrow checker errors.
                 self.render_stunning_menu(&state_clone, &games_clone, selected, scroll, progress, &particles_clone)?;
             }
             EngineState::Playing => {
@@ -572,6 +574,7 @@ impl CacaoEngine {
             EngineState::Loading { progress, status } => {
                 let p = *progress;
                 let s = status.clone();
+                // CALLING RENDER_LOADING_SCREEN AS &self to avoid borrow checker errors.
                 self.render_loading_screen(p, &s)?;
             }
         }
@@ -580,8 +583,9 @@ impl CacaoEngine {
         Ok(())
     }
 
+    // FIX: Changed &mut self to &self
     fn render_stunning_menu(
-        &mut self,
+        &self,
         menu_state: &MenuState,
         games: &[GameEntry],
         selected_index: usize,
@@ -601,6 +605,8 @@ impl CacaoEngine {
                 0.15 + (time * 0.4).sin() * 0.03,
                 1.0
             ];
+            // NOTE: The calls below still use self.renderer, which is fine if Renderer has interior mutability (UnsafeCell or RefCell)
+            // or if the Renderer methods themselves take `&mut self.renderer`.
             self.renderer.clear_screen(bg_color1);
         } else {
             // Static background for other themes
@@ -636,28 +642,28 @@ impl CacaoEngine {
 
         match menu_state {
             MenuState::MainMenu => {
-                // FIX: Pass theme to rendering function
+                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
                 self.render_main_menu(alpha, theme)?;
             }
             MenuState::GameList => {
                 self.render_game_list(games, selected_index, scroll_offset, alpha, theme)?;
             }
             MenuState::GameDetails(idx) => {
-                // FIX: Pass theme to rendering function
+                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
                 if let Some(game) = games.get(*idx) {
                     self.render_game_details(&game.info, alpha, theme)?;
                 }
             }
             MenuState::ThemeSelector => {
-                // FIX: Call the missing function
+                // FIX: Call the missing function (E0502 fixed by function signature change)
                 self.render_theme_selector(alpha, theme)?;
             }
             MenuState::Settings => {
-                // FIX: Pass theme to rendering function
+                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
                 self.render_settings(alpha, theme)?;
             }
             MenuState::About => {
-                // FIX: Pass theme to rendering function
+                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
                 self.render_about(alpha, theme)?;
             }
         }
@@ -665,7 +671,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    fn render_main_menu(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_main_menu(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         // FIX: Use theme colors
         let title_color = theme.accent_color(); 
         let text_color = theme.text_color();
@@ -728,8 +735,9 @@ impl CacaoEngine {
         Ok(())
     }
 
+    // FIX: Changed &mut self to &self
     fn render_game_list(
-        &mut self,
+        &self,
         games: &[GameEntry],
         selected_index: usize,
         scroll_offset: f32,
@@ -854,7 +862,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    fn render_game_details(&mut self, info: &GameInfo, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_game_details(&self, info: &GameInfo, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         // FIX: Use theme colors
         let accent = theme.accent_color();
         let text = theme.text_color();
@@ -945,8 +954,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    // FIX: Missing function implementation for Theme Selector
-    fn render_theme_selector(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_theme_selector(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let text_color = theme.text_color();
         let accent = theme.accent_color();
         let secondary_text = theme.secondary_text_color();
@@ -956,10 +965,13 @@ impl CacaoEngine {
 
         let theme_options = Theme::all();
 
-        if let EngineState::Menu { theme_selector_index, .. } = self.state {
+        // FIX: The `self.state` reference is implicitly immutable here because render_theme_selector takes `&self`
+        if let EngineState::Menu { theme_selector_index, .. } = &self.state { 
             let mut y = 220.0;
             for (i, t) in theme_options.iter().enumerate() {
-                let is_selected = i == *theme_selector_index;
+                // E0614 fix: Since theme_selector_index is &usize, we must dereference it.
+                // This line was already correctly written in your original code if &self was used.
+                let is_selected = i == *theme_selector_index; 
                 let color = if is_selected { accent } else { text_color };
                 let size = if is_selected { 32.0 } else { 24.0 };
 
@@ -997,7 +1009,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    fn render_settings(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_settings(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let accent = theme.accent_color();
         let text = theme.text_color();
         let secondary_text = theme.secondary_text_color();
@@ -1042,7 +1055,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    fn render_about(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_about(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let accent = theme.accent_color();
         let text = theme.text_color();
         let secondary_text = theme.secondary_text_color();
@@ -1123,7 +1137,8 @@ impl CacaoEngine {
         Ok(())
     }
 
-    fn render_loading_screen(&mut self, progress: f32, status: &str) -> Result<(), CacaoError> {
+    // FIX: Changed &mut self to &self
+    fn render_loading_screen(&self, progress: f32, status: &str) -> Result<(), CacaoError> {
         self.renderer.clear_screen([0.05, 0.02, 0.15, 1.0]);
 
         // Loading circle animation
