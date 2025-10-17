@@ -167,42 +167,6 @@ pub fn end_frame(&mut self) -> Result<(), CacaoError> {
 
         Ok(())
     }
-            
-            // 2. Flush renderers using the active pass (Draw order: primitives -> sprites -> text)
-            // NOTE: The sub-renderer flush methods MUST be updated to accept &mut wgpu::RenderPass
-            self.primitive_renderer.flush(
-                &mut render_pass,
-                &self.queue,
-                &mut self.camera,
-            );
-            
-            self.sprite_renderer.flush(
-                &mut render_pass,
-                &self.device,
-                &self.queue,
-                &mut self.camera,
-            );
-            
-            self.text_renderer.flush(
-                &mut render_pass,
-                &self.queue,
-                &mut self.camera,
-            );
-            
-            // 3. Drop the render pass to end it
-            drop(render_pass); 
-            
-            // 4. Submit commands
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
-        
-        // Present
-        if let Some(output) = self.current_output.take() {
-            output.present();
-        }
-        
-        Ok(())
-    }
 
     // FIX: Update clear_screen to only set the clear_color field
     pub fn clear_screen(&mut self, color: [f32; 4]) {
