@@ -253,9 +253,9 @@ impl PrimitiveRenderer {
         self.indices.extend_from_slice(&[vert_idx, vert_idx + 1, vert_idx + 2]);
     }
 
-    pub fn flush(
-        &mut self,
-        render_pass: &mut wgpu::RenderPass,
+    pub fn flush<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
         queue: &wgpu::Queue,
         camera: &mut Camera,
     ) {

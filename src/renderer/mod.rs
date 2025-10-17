@@ -130,43 +130,45 @@ impl Renderer {
     }
 
     // FIX: Rewrite end_frame to create a single render pass and execute all drawing.
-pub fn end_frame(&mut self) -> Result<(), CacaoError> {
-        // FIX: Ensure 'encoder' is mutable when taken from self
-        if let (Some(mut encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
-            
-            // 1. Begin the single render pass
-            // FIX: 'encoder' must be mutable here to call begin_render_pass
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Primary Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color), // Use the stored clear color
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
+    pub fn end_frame(&mut self) -> Result<(), CacaoError> {
+            // FIX 1 (Mutability E0596): Ensure 'encoder' is mutable when taken from self
+            if let (Some(mut encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
+                
+                // 1. Begin the single render pass
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Primary Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(self.clear_color), 
+                            // FIX 2 (E0433 StoreOp): For older wgpu versions, use 'store: true'.
+                            // For modern wgpu (0.19+), you may need to add 'use wgpu::StoreOp;' and use 'store: wgpu::StoreOp::Store,'
+                            store: true, 
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                });
 
-            // 2. Flush all renderers using the SAME render pass
-            self.primitive_renderer.flush(&mut render_pass, self.get_device(), self.get_queue(), &mut self.camera);
-            self.sprite_renderer.flush(&mut render_pass, self.get_device(), self.get_queue(), &mut self.camera);
-            self.text_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
-            
-            // 3. Render pass implicitly dropped here
+                // 2. Flush all renderers using the SAME render pass
+                // FIX 3 (E0061 Argument Count): Remove the redundant 'self.get_device()' argument.
+                // The Device is no longer passed here; the renderers must be modified below.
+                self.primitive_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
+                self.sprite_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
+                self.text_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
+                
+                // 3. Render pass implicitly dropped here
 
-            // 4. Submit command buffer to the queue
-            self.queue.submit(std::iter::once(encoder.finish()));
+                // 4. Submit command buffer to the queue
+                self.queue.submit(std::iter::once(encoder.finish()));
+            }
+
+            if let Some(output) = self.current_output.take() {
+                output.present();
+            }
+
+            Ok(())
         }
-
-        // ... (rest of end_frame remains the same)
-        if let Some(output) = self.current_output.take() {
-            output.present();
-        }
-
-        Ok(())
-    }
 
     // FIX: Update clear_screen to only set the clear_color field
     pub fn clear_screen(&mut self, color: [f32; 4]) {

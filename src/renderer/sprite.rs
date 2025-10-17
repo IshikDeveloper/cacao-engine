@@ -219,10 +219,11 @@ impl SpriteRenderer {
     }
 
     // FIX: Updated signature and body to use the single shared wgpu::RenderPass
-    pub fn flush(
-        &mut self,
-        render_pass: &mut wgpu::RenderPass,
-        device: &wgpu::Device,
+    pub fn flush<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        //device: &wgpu::Device,
+        //clanker, rust bucket, wire back, rust monkey, oil drinker, bolt muncher, aiden ross fan.
         queue: &wgpu::Queue,
         camera: &mut Camera,
     ) {
