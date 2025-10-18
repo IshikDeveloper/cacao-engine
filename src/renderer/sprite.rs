@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: src/renderer/sprite.rs - FIXED
+// FILE: src/renderer/sprite.rs - PROPERLY FIXED
 // ============================================================================
 use wgpu::util::DeviceExt;
 use crate::{errors::CacaoError, renderer::Camera};
@@ -65,6 +65,8 @@ pub struct SpriteRenderer {
     uniform_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     sprite_queue: Vec<SpriteDrawCall>,
+    // Store bind groups to satisfy lifetime requirements
+    cached_bind_groups: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
 }
 
 impl SpriteRenderer {
@@ -187,6 +189,7 @@ impl SpriteRenderer {
             uniform_bind_group_layout,
             texture_bind_group_layout,
             sprite_queue: Vec::new(),
+            cached_bind_groups: Vec::new(),
         })
     }
 
@@ -218,7 +221,6 @@ impl SpriteRenderer {
         });
     }
 
-    // FIXED: Proper lifetime annotation - bind groups stored in self live long enough
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
@@ -230,13 +232,16 @@ impl SpriteRenderer {
             return;
         }
         
+        // Clear cached bind groups from previous frame
+        self.cached_bind_groups.clear();
+        
         let view_proj = camera.get_view_projection_matrix();
         
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         
-        // Process each sprite draw call
+        // Pre-create all bind groups and store them so they live long enough
         for draw_call in &self.sprite_queue {
             let uniform = SpriteUniform {
                 view_proj: view_proj.to_cols_array_2d(),
@@ -246,7 +251,7 @@ impl SpriteRenderer {
             
             queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
             
-            let uniform_bind_group<'a> = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
@@ -255,7 +260,7 @@ impl SpriteRenderer {
                 label: Some("Sprite Uniform Bind Group"),
             });
             
-            let texture_bind_group<'a> = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -270,8 +275,13 @@ impl SpriteRenderer {
                 label: Some("Sprite Texture Bind Group"),
             });
             
-            render_pass.set_bind_group(0, &uniform_bind_group<'a>, &[]);
-            render_pass.set_bind_group(1, &texture_bind_group<'a>, &[]);
+            self.cached_bind_groups.push((uniform_bind_group, texture_bind_group));
+        }
+        
+        // Now draw all sprites using the cached bind groups
+        for (uniform_bind_group, texture_bind_group) in &self.cached_bind_groups {
+            render_pass.set_bind_group(0, uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, texture_bind_group, &[]);
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
         
