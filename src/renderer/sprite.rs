@@ -218,7 +218,7 @@ impl SpriteRenderer {
         });
     }
 
-    // FIXED: Added proper lifetime annotation to match text/primitive renderers
+    // FIXED: Proper lifetime annotation - bind groups stored in self live long enough
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
@@ -236,9 +236,7 @@ impl SpriteRenderer {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         
-        // Create all bind groups first to avoid lifetime issues
-        let mut bind_groups = Vec::new();
-        
+        // Process each sprite draw call
         for draw_call in &self.sprite_queue {
             let uniform = SpriteUniform {
                 view_proj: view_proj.to_cols_array_2d(),
@@ -272,13 +270,8 @@ impl SpriteRenderer {
                 label: Some("Sprite Texture Bind Group"),
             });
             
-            bind_groups.push((uniform_bind_group, texture_bind_group));
-        }
-        
-        // Now draw with the created bind groups
-        for (uniform_bind_group, texture_bind_group) in &bind_groups<'a> {
-            render_pass.set_bind_group(0, uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, texture_bind_group, &[]);
+            render_pass.set_bind_group(0, &uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
         
