@@ -276,7 +276,7 @@ impl SpriteRenderer {
         }
         
         // Now draw with the created bind groups
-        for (uniform_bind_group, texture_bind_group) in &bind_groups {
+        for (uniform_bind_group, texture_bind_group) in &bind_groups<'a> {
             render_pass.set_bind_group(0, uniform_bind_group, &[]);
             render_pass.set_bind_group(1, texture_bind_group, &[]);
             render_pass.draw_indexed(0..6, 0, 0..1);
