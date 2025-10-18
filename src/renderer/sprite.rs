@@ -218,10 +218,10 @@ impl SpriteRenderer {
         });
     }
 
-    // FIXED: Create bind groups outside the loop to fix lifetime issues
-    pub fn flush(
-        &mut self,
-        render_pass: &mut wgpu::RenderPass,
+    // FIXED: Added proper lifetime annotation to match text/primitive renderers
+    pub fn flush<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         camera: &mut Camera,
