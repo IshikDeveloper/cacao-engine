@@ -246,7 +246,7 @@ impl SpriteRenderer {
             
             queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
             
-            let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let uniform_bind_group<'a> = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
@@ -255,7 +255,7 @@ impl SpriteRenderer {
                 label: Some("Sprite Uniform Bind Group"),
             });
             
-            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let texture_bind_group<'a> = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -270,8 +270,8 @@ impl SpriteRenderer {
                 label: Some("Sprite Texture Bind Group"),
             });
             
-            render_pass.set_bind_group(0, &uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, &texture_bind_group, &[]);
+            render_pass.set_bind_group(0, &uniform_bind_group<'a>, &[]);
+            render_pass.set_bind_group(1, &texture_bind_group<'a>, &[]);
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
         
