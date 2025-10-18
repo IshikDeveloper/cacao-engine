@@ -585,7 +585,7 @@ impl CacaoEngine {
 
     // FIX: Changed &mut self to &self
     fn render_stunning_menu(
-        &self,
+        &mut self,
         menu_state: &MenuState,
         games: &[GameEntry],
         selected_index: usize,
@@ -672,7 +672,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_main_menu(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    fn render_main_menu(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         // FIX: Use theme colors
         let title_color = theme.accent_color(); 
         let text_color = theme.text_color();
@@ -737,7 +737,7 @@ impl CacaoEngine {
 
     // FIX: Changed &mut self to &self
     fn render_game_list(
-        &self,
+        &mut self,
         games: &[GameEntry],
         selected_index: usize,
         scroll_offset: f32,
@@ -863,7 +863,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_game_details(&self, info: &GameInfo, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    fn render_game_details(&mut self, info: &GameInfo, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         // FIX: Use theme colors
         let accent = theme.accent_color();
         let text = theme.text_color();
@@ -955,7 +955,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_theme_selector(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    fn render_theme_selector(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let text_color = theme.text_color();
         let accent = theme.accent_color();
         let secondary_text = theme.secondary_text_color();
@@ -1010,7 +1010,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_settings(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    fn render_settings(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let accent = theme.accent_color();
         let text = theme.text_color();
         let secondary_text = theme.secondary_text_color();
@@ -1056,7 +1056,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_about(&self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
+    fn render_about(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         let accent = theme.accent_color();
         let text = theme.text_color();
         let secondary_text = theme.secondary_text_color();
@@ -1138,7 +1138,7 @@ impl CacaoEngine {
     }
 
     // FIX: Changed &mut self to &self
-    fn render_loading_screen(&self, progress: f32, status: &str) -> Result<(), CacaoError> {
+    fn render_loading_screen(&mut self, progress: f32, status: &str) -> Result<(), CacaoError> {
         self.renderer.clear_screen([0.05, 0.02, 0.15, 1.0]);
 
         // Loading circle animation

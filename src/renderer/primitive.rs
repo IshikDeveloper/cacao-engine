@@ -1,5 +1,4 @@
 // src/renderer/primitive.rs - FIXED SIGNATURE
-use wgpu::util::DeviceExt;
 use crate::errors::CacaoError;
 use super::Camera;
 
