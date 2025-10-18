@@ -1,10 +1,7 @@
-// ============================================================================
-// FILE: src/renderer/text.rs - Complete Working Implementation
-// ============================================================================
+// src/renderer/text.rs - FIXED LIFETIME ISSUE
 use crate::errors::CacaoError;
 use super::Camera;
 use std::collections::HashMap;
-use wgpu::util::DeviceExt;
 
 const FONT_WIDTH: u32 = 8;
 const FONT_HEIGHT: u32 = 8;
@@ -207,7 +204,6 @@ impl TextRenderer {
     fn generate_default_font() -> Vec<u8> {
         let mut data = vec![0u8; (FONT_ATLAS_SIZE * FONT_ATLAS_SIZE) as usize];
         
-        // Generate simple ASCII characters (space through ~)
         for ch in 32u8..127u8 {
             let idx = ch as usize;
             let row = idx / 16;
@@ -216,7 +212,6 @@ impl TextRenderer {
             let char_x = col * FONT_WIDTH as usize;
             let char_y = row * FONT_HEIGHT as usize;
             
-            // Draw simple rectangles for visible characters
             if ch > 32 {
                 for y in 0..FONT_HEIGHT as usize {
                     for x in 0..FONT_WIDTH as usize {
@@ -224,7 +219,6 @@ impl TextRenderer {
                         let atlas_y = char_y + y;
                         let atlas_idx = atlas_y * FONT_ATLAS_SIZE as usize + atlas_x;
                         
-                        // Simple rectangle pattern
                         if x > 0 && x < 7 && y > 0 && y < 7 {
                             data[atlas_idx] = 255;
                         }
@@ -330,7 +324,6 @@ impl TextRenderer {
         queue: &wgpu::Queue,
         bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Result<FontAtlas, CacaoError> {
-        // For now, use default atlas
         Self::create_default_font_atlas(device, queue, bind_group_layout)
     }
 
@@ -349,7 +342,7 @@ impl TextRenderer {
 
         for ch in text.chars() {
             if ch == '\n' {
-                continue; // Skip newlines for now
+                continue;
             }
             
             if ch == ' ' {
@@ -404,9 +397,10 @@ impl TextRenderer {
         }
     }
 
-    pub fn flush(
-        &mut self,
-        render_pass: &mut wgpu::RenderPass,
+    // FIXED: Added proper lifetime annotation
+    pub fn flush<'a>(
+        &'a mut self,
+        render_pass: &mut wgpu::RenderPass<'a>,
         queue: &wgpu::Queue,
         camera: &mut Camera,
     ) {

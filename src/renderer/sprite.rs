@@ -218,10 +218,10 @@ impl SpriteRenderer {
         });
     }
 
-    // FIXED: Added device parameter and fixed bind group creation
-    pub fn flush<'a>(
-        &'a mut self,
-        render_pass: &mut wgpu::RenderPass<'a>,
+    // FIXED: Create bind groups outside the loop to fix lifetime issues
+    pub fn flush(
+        &mut self,
+        render_pass: &mut wgpu::RenderPass,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         camera: &mut Camera,
@@ -235,6 +235,9 @@ impl SpriteRenderer {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        
+        // Create all bind groups first to avoid lifetime issues
+        let mut bind_groups = Vec::new();
         
         for draw_call in &self.sprite_queue {
             let uniform = SpriteUniform {
@@ -269,8 +272,13 @@ impl SpriteRenderer {
                 label: Some("Sprite Texture Bind Group"),
             });
             
-            render_pass.set_bind_group(0, &uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, &texture_bind_group, &[]);
+            bind_groups.push((uniform_bind_group, texture_bind_group));
+        }
+        
+        // Now draw with the created bind groups
+        for (uniform_bind_group, texture_bind_group) in &bind_groups {
+            render_pass.set_bind_group(0, uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, texture_bind_group, &[]);
             render_pass.draw_indexed(0..6, 0, 0..1);
         }
         

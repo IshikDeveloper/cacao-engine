@@ -593,11 +593,10 @@ impl CacaoEngine {
         progress: f32,
         particles: &[MenuParticle],
     ) -> Result<(), CacaoError> {
-        // Theme-aware background
-        let theme = &self.current_theme;
+        // FIXED: Clone theme to avoid borrow issues
+        let theme = self.current_theme.clone();
         
         if matches!(theme, Theme::Animated) {
-            // Gorgeous gradient background for animated theme
             let time = self.menu_animation_time;
             let bg_color1 = [
                 0.05 + (time * 0.5).sin() * 0.02,
@@ -605,15 +604,11 @@ impl CacaoEngine {
                 0.15 + (time * 0.4).sin() * 0.03,
                 1.0
             ];
-            // NOTE: The calls below still use self.renderer, which is fine if Renderer has interior mutability (UnsafeCell or RefCell)
-            // or if the Renderer methods themselves take `&mut self.renderer`.
             self.renderer.clear_screen(bg_color1);
         } else {
-            // Static background for other themes
             self.renderer.clear_screen(theme.background_color());
         }
 
-        // Draw animated particles only for animated theme
         if theme.should_show_particles() {
             for particle in particles {
                 self.renderer.draw_circle(
@@ -626,7 +621,6 @@ impl CacaoEngine {
             }
         }
 
-        // Wii theme: Draw channel-style grid lines
         if matches!(theme, Theme::Wii) {
             for i in 0..10 {
                 let y = 100.0 + i as f32 * 60.0;
@@ -637,40 +631,33 @@ impl CacaoEngine {
             }
         }
 
-        // Smooth fade-in effect
         let alpha = progress.min(1.0);
 
         match menu_state {
             MenuState::MainMenu => {
-                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
-                self.render_main_menu(alpha, theme)?;
+                self.render_main_menu(alpha, &theme)?;
             }
             MenuState::GameList => {
-                self.render_game_list(games, selected_index, scroll_offset, alpha, theme)?;
+                self.render_game_list(games, selected_index, scroll_offset, alpha, &theme)?;
             }
             MenuState::GameDetails(idx) => {
-                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
                 if let Some(game) = games.get(*idx) {
-                    self.render_game_details(&game.info, alpha, theme)?;
+                    self.render_game_details(&game.info, alpha, &theme)?;
                 }
             }
             MenuState::ThemeSelector => {
-                // FIX: Call the missing function (E0502 fixed by function signature change)
-                self.render_theme_selector(alpha, theme)?;
+                self.render_theme_selector(alpha, &theme)?;
             }
             MenuState::Settings => {
-                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
-                self.render_settings(alpha, theme)?;
+                self.render_settings(alpha, &theme)?;
             }
             MenuState::About => {
-                // FIX: Pass theme to rendering function (E0502 fixed by function signature change)
-                self.render_about(alpha, theme)?;
+                self.render_about(alpha, &theme)?;
             }
         }
 
         Ok(())
     }
-
     // FIX: Changed &mut self to &self
     fn render_main_menu(&mut self, alpha: f32, theme: &Theme) -> Result<(), CacaoError> {
         // FIX: Use theme colors

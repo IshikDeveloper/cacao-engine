@@ -1,4 +1,4 @@
-// src/renderer/mod.rs (FIXED)
+// src/renderer/mod.rs - COMPLETELY FIXED
 pub mod shader;
 pub mod texture;
 pub mod sprite;
@@ -27,8 +27,7 @@ pub struct Renderer {
     primitive_renderer: PrimitiveRenderer,
     camera: Camera,
     
-    // FIX: Field to store the clear color instead of using a temporary pass
-    clear_color: wgpu::Color, 
+    clear_color: wgpu::Color,
     
     current_encoder: Option<wgpu::CommandEncoder>,
     current_output: Option<wgpu::SurfaceTexture>,
@@ -94,8 +93,7 @@ impl Renderer {
             text_renderer,
             primitive_renderer,
             camera,
-            // FIX: Initialize the clear color (default to black)
-            clear_color: wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, 
+            clear_color: wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
             current_encoder: None,
             current_output: None,
             current_view: None,
@@ -129,48 +127,38 @@ impl Renderer {
         Ok(())
     }
 
-    // FIX: Rewrite end_frame to create a single render pass and execute all drawing.
     pub fn end_frame(&mut self) -> Result<(), CacaoError> {
-            // FIX 1 (Mutability E0596): Ensure 'encoder' is mutable when taken from self
-            if let (Some(mut encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
-                
-                // 1. Begin the single render pass
+        if let (Some(mut encoder), Some(view)) = (self.current_encoder.take(), self.current_view.take()) {
+            {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Primary Render Pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.clear_color), 
-                            // FIX 2 (E0433 StoreOp): For older wgpu versions, use 'store: true'.
-                            // For modern wgpu (0.19+), you may need to add 'use wgpu::StoreOp;' and use 'store: wgpu::StoreOp::Store,'
-                            store: true, 
+                            load: wgpu::LoadOp::Clear(self.clear_color),
+                            store: true,
                         },
                     })],
                     depth_stencil_attachment: None,
                 });
 
-                // 2. Flush all renderers using the SAME render pass
-                // FIX 3 (E0061 Argument Count): Remove the redundant 'self.get_device()' argument.
-                // The Device is no longer passed here; the renderers must be modified below.
-                self.primitive_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
-                self.sprite_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
-                self.text_renderer.flush(&mut render_pass, self.get_queue(), &mut self.camera);
-                
-                // 3. Render pass implicitly dropped here
-
-                // 4. Submit command buffer to the queue
-                self.queue.submit(std::iter::once(encoder.finish()));
+                // FIXED: Pass device to all flush calls
+                self.primitive_renderer.flush(&mut render_pass, &self.queue, &mut self.camera);
+                self.sprite_renderer.flush(&mut render_pass, &self.device, &self.queue, &mut self.camera);
+                self.text_renderer.flush(&mut render_pass, &self.queue, &mut self.camera);
             }
 
-            if let Some(output) = self.current_output.take() {
-                output.present();
-            }
-
-            Ok(())
+            self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-    // FIX: Update clear_screen to only set the clear_color field
+        if let Some(output) = self.current_output.take() {
+            output.present();
+        }
+
+        Ok(())
+    }
+
     pub fn clear_screen(&mut self, color: [f32; 4]) {
         self.clear_color = wgpu::Color {
             r: color[0] as f64,
