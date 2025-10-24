@@ -1,11 +1,11 @@
-// src/renderer/text.rs - FIXED LIFETIME ISSUE
+// src/renderer/text.rs - FIXED FONT RENDERING
 use crate::errors::CacaoError;
 use super::Camera;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-const FONT_WIDTH: u32 = 8;
-const FONT_HEIGHT: u32 = 8;
-const FONT_ATLAS_SIZE: u32 = 128;
+const FONT_ATLAS_SIZE: u32 = 512;
+const MAX_GLYPHS: usize = 96; // ASCII printable characters (32-126)
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -37,11 +37,27 @@ struct TextUniform {
     view_proj: [[f32; 4]; 4],
 }
 
+#[derive(Debug)]
+struct GlyphMetrics {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    advance_x: f32,
+    advance_y: f32,
+    offset_x: i32,
+    offset_y: i32,
+}
+
 struct FontAtlas {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
+    glyph_metrics: HashMap<char, GlyphMetrics>,
+    cursor_x: u32,
+    cursor_y: u32,
+    max_row_height: u32,
 }
 
 pub struct TextRenderer {
@@ -101,14 +117,14 @@ impl TextRenderer {
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
                         view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     },
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -184,8 +200,6 @@ impl TextRenderer {
         let default_atlas = Self::create_default_font_atlas(device, queue, &texture_bind_group_layout)?;
         font_atlases.insert("default".to_string(), default_atlas);
 
-        Self::try_load_custom_fonts(device, queue, &texture_bind_group_layout, &mut font_atlases);
-
         Ok(Self {
             render_pipeline,
             vertex_buffer,
@@ -199,35 +213,6 @@ impl TextRenderer {
             max_chars,
             texture_bind_group_layout,
         })
-    }
-
-    fn generate_default_font() -> Vec<u8> {
-        let mut data = vec![0u8; (FONT_ATLAS_SIZE * FONT_ATLAS_SIZE) as usize];
-        
-        for ch in 32u8..127u8 {
-            let idx = ch as usize;
-            let row = idx / 16;
-            let col = idx % 16;
-            
-            let char_x = col * FONT_WIDTH as usize;
-            let char_y = row * FONT_HEIGHT as usize;
-            
-            if ch > 32 {
-                for y in 0..FONT_HEIGHT as usize {
-                    for x in 0..FONT_WIDTH as usize {
-                        let atlas_x = char_x + x;
-                        let atlas_y = char_y + y;
-                        let atlas_idx = atlas_y * FONT_ATLAS_SIZE as usize + atlas_x;
-                        
-                        if x > 0 && x < 7 && y > 0 && y < 7 {
-                            data[atlas_idx] = 255;
-                        }
-                    }
-                }
-            }
-        }
-        
-        data
     }
 
     fn create_default_font_atlas(
@@ -252,7 +237,32 @@ impl TextRenderer {
             view_formats: &[],
         });
 
-        let font_data = Self::generate_default_font();
+        let mut data = vec![0u8; (FONT_ATLAS_SIZE * FONT_ATLAS_SIZE) as usize];
+        
+        // Simple 8x8 font rendering
+        for ch in 32u8..127u8 {
+            let idx = ch as usize - 32;
+            let row = idx / 16;
+            let col = idx % 16;
+            
+            let char_x = col * 8;
+            let char_y = row * 8;
+            
+            // Render a simple box for each character
+            if ch != 32 { // Skip space character
+                for y in 1..7 {
+                    for x in 1..7 {
+                        let atlas_x = char_x + x;
+                        let atlas_y = char_y + y;
+                        let atlas_idx = atlas_y * FONT_ATLAS_SIZE as usize + atlas_x;
+                        
+                        if atlas_idx < data.len() {
+                            data[atlas_idx] = 255;
+                        }
+                    }
+                }
+            }
+        }
         
         queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -261,7 +271,7 @@ impl TextRenderer {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &font_data,
+            &data,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(FONT_ATLAS_SIZE),
@@ -275,9 +285,9 @@ impl TextRenderer {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
@@ -296,35 +306,37 @@ impl TextRenderer {
             label: Some("Default Font Bind Group"),
         });
 
-        Ok(FontAtlas { texture, view, sampler, bind_group })
-    }
-
-    fn try_load_custom_fonts(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bind_group_layout: &wgpu::BindGroupLayout,
-        font_atlases: &mut HashMap<String, FontAtlas>,
-    ) {
-        if let Ok(atlas) = Self::load_font_from_file("assets/fonts/PressStart2P.ttf", device, queue, bind_group_layout) {
-            font_atlases.insert("PressStart2P".to_string(), atlas);
+        let mut glyph_metrics = HashMap::new();
+        for ch in 32..127 {
+            let idx = ch - 32;
+            let row = idx / 16;
+            let col = idx % 16;
+            
+            glyph_metrics.insert(
+                ch as char,
+                GlyphMetrics {
+                    x: (col * 8) as u32,
+                    y: (row * 8) as u32,
+                    width: 8,
+                    height: 8,
+                    advance_x: 8.0,
+                    advance_y: 0.0,
+                    offset_x: 0,
+                    offset_y: 0,
+                }
+            );
         }
 
-        if let Ok(atlas) = Self::load_font_from_file("assets/fonts/Roboto-Regular.ttf", device, queue, bind_group_layout) {
-            font_atlases.insert("Roboto".to_string(), atlas);
-        }
-
-        if let Ok(atlas) = Self::load_font_from_file("assets/fonts/RodinNTLG.otf", device, queue, bind_group_layout) {
-            font_atlases.insert("RodinNTLG".to_string(), atlas);
-        }
-    }
-
-    fn load_font_from_file(
-        _path: &str,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> Result<FontAtlas, CacaoError> {
-        Self::create_default_font_atlas(device, queue, bind_group_layout)
+        Ok(FontAtlas {
+            texture,
+            view,
+            sampler,
+            bind_group,
+            glyph_metrics,
+            cursor_x: 0,
+            cursor_y: 0,
+            max_row_height: 0,
+        })
     }
 
     pub fn set_font(&mut self, font_name: &str) {
@@ -334,56 +346,68 @@ impl TextRenderer {
     }
 
     pub fn draw_text(&mut self, text: &str, x: f32, y: f32, size: f32, color: [f32; 4]) {
-        let char_width = size * 0.6;
-        let char_height = size;
-        
+        let font_atlas = self.font_atlases.get_mut(&self.current_font).unwrap();
         let mut cursor_x = x;
-        let cursor_y = y;
+        let mut cursor_y = y;
 
         for ch in text.chars() {
             if ch == '\n' {
+                cursor_x = x;
+                cursor_y += size;
                 continue;
             }
-            
+
+            if ch == '\t' {
+                cursor_x += size * 4.0; // 4 spaces
+                continue;
+            }
+
+            let metrics = match font_atlas.glyph_metrics.get(&ch) {
+                Some(metrics) => metrics,
+                None => {
+                    // Skip unknown characters
+                    if ch != ' ' {
+                        cursor_x += size * 0.5; // Space for unknown char
+                    }
+                    continue;
+                }
+            };
+
             if ch == ' ' {
-                cursor_x += char_width;
+                cursor_x += size * 0.5; // Space width
                 continue;
             }
 
-            let char_code = ch as u8;
-            if char_code < 32 || char_code > 126 {
-                cursor_x += char_width;
-                continue;
-            }
-
-            let atlas_idx = char_code as usize;
-            let atlas_row = atlas_idx / 16;
-            let atlas_col = atlas_idx % 16;
+            let glyph_width = metrics.width as f32 * size / 8.0;
+            let glyph_height = metrics.height as f32 * size / 8.0;
             
-            let u0 = (atlas_col * FONT_WIDTH as usize) as f32 / FONT_ATLAS_SIZE as f32;
-            let v0 = (atlas_row * FONT_HEIGHT as usize) as f32 / FONT_ATLAS_SIZE as f32;
-            let u1 = u0 + FONT_WIDTH as f32 / FONT_ATLAS_SIZE as f32;
-            let v1 = v0 + FONT_HEIGHT as f32 / FONT_ATLAS_SIZE as f32;
+            let u0 = metrics.x as f32 / FONT_ATLAS_SIZE as f32;
+            let v0 = metrics.y as f32 / FONT_ATLAS_SIZE as f32;
+            let u1 = (metrics.x + metrics.width) as f32 / FONT_ATLAS_SIZE as f32;
+            let v1 = (metrics.y + metrics.height) as f32 / FONT_ATLAS_SIZE as f32;
+
+            let pos_x = cursor_x + (metrics.offset_x as f32) * size / 8.0;
+            let pos_y = cursor_y + (metrics.offset_y as f32) * size / 8.0;
 
             let vert_idx = self.vertices.len() as u16;
 
             self.vertices.push(GlyphVertex {
-                position: [cursor_x, cursor_y],
+                position: [pos_x, pos_y],
                 tex_coords: [u0, v0],
                 color,
             });
             self.vertices.push(GlyphVertex {
-                position: [cursor_x + char_width, cursor_y],
+                position: [pos_x + glyph_width, pos_y],
                 tex_coords: [u1, v0],
                 color,
             });
             self.vertices.push(GlyphVertex {
-                position: [cursor_x + char_width, cursor_y + char_height],
+                position: [pos_x + glyph_width, pos_y + glyph_height],
                 tex_coords: [u1, v1],
                 color,
             });
             self.vertices.push(GlyphVertex {
-                position: [cursor_x, cursor_y + char_height],
+                position: [pos_x, pos_y + glyph_height],
                 tex_coords: [u0, v1],
                 color,
             });
@@ -393,11 +417,10 @@ impl TextRenderer {
                 vert_idx + 2, vert_idx + 3, vert_idx,
             ]);
 
-            cursor_x += char_width;
+            cursor_x += metrics.advance_x * size / 8.0;
         }
     }
 
-    // FIXED: Added proper lifetime annotation
     pub fn flush<'a>(
         &'a mut self,
         render_pass: &mut wgpu::RenderPass<'a>,
