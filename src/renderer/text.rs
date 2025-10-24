@@ -307,13 +307,13 @@ impl TextRenderer {
         });
 
         let mut glyph_metrics = HashMap::new();
-        for ch in 32..127 {
-            let idx = ch - 32;
+        for ch in 32u8..127u8 {  // Changed from 32..127 to 32u8..127u8
+            let idx = ch as usize - 32;
             let row = idx / 16;
             let col = idx % 16;
             
             glyph_metrics.insert(
-                ch as char,
+                ch as char,  // This now works because ch is u8
                 GlyphMetrics {
                     x: (col * 8) as u32,
                     y: (row * 8) as u32,
